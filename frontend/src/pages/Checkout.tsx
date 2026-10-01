@@ -1,0 +1,286 @@
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import Header, { rupiah } from '../components/ShopHeader'
+import { useCart } from '../store'
+import { api } from '../services/api'
+
+interface CostResult {
+  ok: boolean
+  data?: { services: { service: string; description: string; cost: number; etd: string }[] }
+  error?: string
+}
+
+export default function Checkout() {
+  const { shopSlug = '' } = useParams()
+  const navigate = useNavigate()
+  const { items, setQty, remove, subtotal, clear } = useCart()
+  const [costs, setCosts] = useState<CostResult['data'] | null>(null)
+  const [ongkirErr, setOngkirErr] = useState('')
+  const [selected, setSelected] = useState<{ service: string; cost: number; etd: string } | null>(null)
+  const [form, setForm] = useState({
+    buyer_name: '',
+    buyer_phone: '',
+    buyer_email: '',
+    shipping_address: '',
+    destination_city_id: '',
+    courier: 'jne',
+  })
+  const [loadingCost, setLoadingCost] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const totalWeight = items.reduce((a, i) => a + i.weight * i.qty, 0)
+  const sub = subtotal()
+
+  async function cekOngkir() {
+    setLoadingCost(true)
+    setOngkirErr('')
+    setCosts(null)
+    setSelected(null)
+    try {
+      const res = await api.post<CostResult>('/shipping/cost', {
+        // origin diambil dari kota toko; untuk demo pakai 152 (Jakarta) sampai
+        // storefront mengirim city_id toko.
+        origin: '152',
+        destination: form.destination_city_id,
+        weight: Math.max(totalWeight, 1),
+        courier: form.courier,
+      })
+      if (res.ok && res.data) setCosts(res.data)
+      else setOngkirErr(res.error ?? 'Gagal cek ongkir.')
+    } catch (e) {
+      setOngkirErr(e instanceof Error ? e.message : 'Gagal cek ongkir.')
+    } finally {
+      setLoadingCost(false)
+    }
+  }
+
+  async function checkout(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+
+    if (!selected) {
+      setError('Pilih layanan pengiriman dulu.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const res = await api.post<{
+        data: { order_no: string; total: number; payment_url: string | null; payment_note: string | null }
+      }>('/checkout', {
+        merchant_slug: shopSlug,
+        ...form,
+        service: selected.service,
+        shipping_cost: selected.cost,
+        items: items.map((i) => ({ product_id: i.productId, qty: i.qty })),
+      })
+
+      clear()
+
+      if (res.data.payment_url) {
+        window.location.href = res.data.payment_url
+      } else {
+        navigate(`/${shopSlug}/lacak?order=${res.data.order_no}`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Checkout gagal')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const input = 'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm'
+
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Header shopSlug={shopSlug} shopName="Keranjang" />
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <p className="text-slate-500">Keranjang kosong.</p>
+          <Link to={`/${shopSlug}`} className="mt-4 inline-block underline">
+            Kembali belanja
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Header shopSlug={shopSlug} shopName="Checkout" />
+
+      <form onSubmit={checkout} className="max-w-6xl mx-auto px-4 py-8 grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <section className="bg-white rounded-xl border border-slate-200 p-5">
+            <h2 className="font-semibold mb-3">Keranjang</h2>
+            <ul className="divide-y divide-slate-100">
+              {items.map((i) => (
+                <li key={i.productId} className="py-3 flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-lg bg-slate-100 overflow-hidden shrink-0">
+                    {i.image && <img src={i.image} alt="" className="w-full h-full object-cover" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{i.title}</p>
+                    <p className="text-xs text-slate-500">{rupiah(i.price)}</p>
+                  </div>
+                  <div className="flex items-center rounded-lg border border-slate-300 text-sm">
+                    <button type="button" onClick={() => setQty(i.productId, i.qty - 1)} className="px-2 py-1">
+                      −
+                    </button>
+                    <span className="px-2 tabular-nums">{i.qty}</span>
+                    <button type="button" onClick={() => setQty(i.productId, i.qty + 1)} className="px-2 py-1">
+                      +
+                    </button>
+                  </div>
+                  <button type="button" onClick={() => remove(i.productId)} className="text-xs text-rose-600 px-2">
+                    hapus
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="bg-white rounded-xl border border-slate-200 p-5">
+            <h2 className="font-semibold mb-3">Alamat Pengiriman</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Nama penerima</span>
+                <input
+                  className={input}
+                  required
+                  value={form.buyer_name}
+                  onChange={(e) => setForm({ ...form, buyer_name: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">No. HP</span>
+                <input
+                  className={input}
+                  required
+                  value={form.buyer_phone}
+                  onChange={(e) => setForm({ ...form, buyer_phone: e.target.value })}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Email (opsional)</span>
+                <input
+                  type="email"
+                  className={input}
+                  value={form.buyer_email}
+                  onChange={(e) => setForm({ ...form, buyer_email: e.target.value })}
+                />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="text-sm font-medium text-slate-700">Alamat lengkap</span>
+                <textarea
+                  className={input}
+                  rows={3}
+                  required
+                  value={form.shipping_address}
+                  onChange={(e) => setForm({ ...form, shipping_address: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">ID Kota tujuan (RajaOngkir)</span>
+                <input
+                  className={input}
+                  required
+                  placeholder="mis. 152"
+                  value={form.destination_city_id}
+                  onChange={(e) => setForm({ ...form, destination_city_id: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Kurir</span>
+                <select
+                  className={input}
+                  value={form.courier}
+                  onChange={(e) => setForm({ ...form, courier: e.target.value })}
+                >
+                  {['jne', 'pos', 'tiki', 'sicepat', 'jnt', 'anteraja', 'ninja', 'ide'].map((c) => (
+                    <option key={c} value={c}>
+                      {c.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <button
+              type="button"
+              onClick={cekOngkir}
+              disabled={loadingCost || !form.destination_city_id}
+              className="mt-4 px-4 py-2 rounded-lg border border-slate-300 text-sm hover:bg-slate-50 disabled:opacity-40"
+            >
+              {loadingCost ? 'Mengecek…' : 'Cek Ongkir'}
+            </button>
+
+            {ongkirErr && (
+              <p className="mt-3 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                {ongkirErr} <span className="text-xs">(isi RAJAONGKIR_API_KEY di backend .env)</span>
+              </p>
+            )}
+
+            {costs && (
+              <div className="mt-3 space-y-2">
+                {costs.services.map((s) => (
+                  <label
+                    key={s.service}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 cursor-pointer text-sm ${
+                      selected?.service === s.service ? 'border-slate-900 bg-slate-50' : 'border-slate-200'
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="service"
+                        checked={selected?.service === s.service}
+                        onChange={() => setSelected(s)}
+                      />
+                      <span>
+                        <span className="font-medium">{s.service}</span>{' '}
+                        <span className="text-slate-500">· {s.description} · {s.etd} hari</span>
+                      </span>
+                    </span>
+                    <span className="font-medium">{rupiah(s.cost)}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <aside className="lg:col-span-1">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-24 space-y-3">
+            <h2 className="font-semibold">Ringkasan</h2>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Subtotal</span>
+              <span>{rupiah(sub)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Ongkir ({totalWeight} g)</span>
+              <span>{selected ? rupiah(selected.cost) : '—'}</span>
+            </div>
+            <div className="flex justify-between font-bold pt-3 border-t border-slate-100">
+              <span>Total</span>
+              <span>{rupiah(sub + (selected?.cost ?? 0))}</span>
+            </div>
+
+            {error && <p className="text-sm text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+
+            <button
+              disabled={submitting}
+              className="w-full rounded-lg bg-slate-900 text-white py-3 font-medium disabled:opacity-50"
+            >
+              {submitting ? 'Memproses…' : 'Bayar Sekarang'}
+            </button>
+            <p className="text-xs text-slate-400 text-center">
+              Pembayaran lewat Midtrans/Xendit. Jika gateway belum aktif, pesanan tercatat sebagai belum dibayar.
+            </p>
+          </div>
+        </aside>
+      </form>
+    </div>
+  )
+}

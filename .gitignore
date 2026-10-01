@@ -1,0 +1,30 @@
+# Dependencies
+/vendor
+/node_modules
+
+# Laravel
+/backend/.env
+/backend/.env.backup
+/backend/.env.production
+/backend/storage/*.key
+/backend/storage/pail
+/backend/public/storage
+/backend/public/hot
+/backend/bootstrap/cache/*.php
+/backend/database/*.sqlite
+/backend/database/*.sqlite-journal
+
+# Frontend
+/frontend/dist
+/frontend/.vite
+/frontend/*.tsbuildinfo
+
+# Editor / OS
+.idea
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
