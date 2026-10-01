@@ -4,7 +4,8 @@ Platform **multichannel seller** untuk penjual online Indonesia. Upload produk *
 
 - tayang otomatis di **storefront publik** milik sendiri (`/:slug-toko`) — lengkap dengan katalog, keranjang, checkout, dan lacak pesanan;
 - dipublikasikan ke **Facebook Page, Instagram Business, TikTok, Shopee, dan Tokopedia**;
-- dilengkapi **cek ongkir** (RajaOngkir), **lacak resi** (BinderByte), **AI caption** (gateway OpenAI-compatible), dan **payment gateway** (Midtrans).
+- dilengkapi **cek ongkir** (RajaOngkir), **lacak resi** (BinderByte), **AI caption** (gateway OpenAI-compatible), dan **payment gateway** (Midtrans);
+- punya sistem **langganan seller** (Free/Pro/Bisnis) dengan batas produk, channel aktif, dan publish bulanan — dibayar via Midtrans — plus **panel admin** (statistik, ganti plan, ban merchant) dan **sinkron stok otomatis** ke channel.
 
 Repo: https://github.com/project-wq/satuinaja
 
@@ -289,7 +290,14 @@ numprocs=2
 sudo supervisorctl reread && sudo supervisorctl update
 ```
 
-### 9. Scheduler (backup & pemeliharaan)
+### 9. Scheduler (wajib — langganan & sinkron stok)
+
+Scheduler menjalankan 2 perintah (lihat `routes/console.php`):
+
+- `satu:billing-rotate` — tiap hari 00.05: reset hitungan publish bulanan + batalkan langganan kedaluwarsa (otomatis turun ke Free).
+- `satu:sync-stock` — tiap 5 menit: deteksi perubahan stok/harga/deskripsi produk lalu dorong ke channel aktif.
+
+Tanpa cron ini, batas bulanan tidak pernah reset dan sinkron stok tidak jalan.
 
 ```bash
 crontab -e
@@ -428,7 +436,7 @@ npm run preview                                 # preview hasil build
 cd backend && php artisan test
 ```
 
-Mencakup 25 test: registrasi & login, pembatasan percobaan login, isolasi data antar-seller, CRUD produk, checkout (stok & total), lacak pesanan, dan verifikasi signature webhook.
+Mencakup 31 test: registrasi & login, pembatasan percobaan login, isolasi data antar-seller, CRUD produk, checkout (stok & total), lacak pesanan, verifikasi signature webhook, **batas plan (produk/channel/publish), alur langganan Midtrans (settlement webhook), dan hak akses admin panel**.
 
 CI di GitHub Actions (`.github/workflows/ci.yml`) menjalankan test backend **dan** build frontend setiap kali ada push ke `main`/`develop`. Cek hasilnya di tab **Actions** repo.
 
@@ -440,7 +448,8 @@ CI di GitHub Actions (`.github/workflows/ci.yml`) menjalankan test backend **dan
 backend/
 ├── app/
 │   ├── Http/Controllers/Api/V1/   Auth, Product, Channel, Ai,
-│   │                              Storefront, Shipping, Checkout, Webhook
+│   │                              Storefront, Shipping, Checkout, Webhook,
+│   │                              Billing (langganan), Admin (panel admin)
 │   ├── Jobs/PublishToChannel.php  job publish (dijalankan queue)
 │   ├── Models/                    Merchant, Product, Channel, Order, ...
 │   ├── Policies/ProductPolicy.php aturan akses produk
@@ -453,7 +462,8 @@ backend/
 │       ├── TokopediaService.php   endpoint mitra / payload siap-tempel
 │       ├── RajaOngkirService.php  cek ongkir
 │       ├── ResiService.php        lacak resi
-│       ├── MidtransService.php    payment
+│       ├── MidtransService.php    payment + Snap langganan
+│       ├── StockSyncService.php   sinkron stok/harga ke channel
 │       └── AiCaptionService.php   caption otomatis
 ├── database/migrations/           skema tabel
 ├── routes/api.php                 semua endpoint /api/v1
@@ -461,7 +471,8 @@ backend/
 
 frontend/src/
 ├── pages/                         Shop, ProductDetail, Checkout, Track, Login, Register
-├── pages/Seller/                  Dashboard, Products, Channels, Orders
+├── pages/Seller/                  Dashboard, Products, Channels, Orders,
+│                                  Billing (paket), Admin
 ├── components/                    SellerLayout, ShopHeader
 ├── services/api.ts                pembungkus fetch (cookie session)
 └── store.ts                       state auth + keranjang

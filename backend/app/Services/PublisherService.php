@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\Api\V1\BillingController;
 use App\Models\Channel;
+use App\Models\Merchant;
 use App\Models\Product;
 use App\Models\PublishLog;
 
@@ -37,6 +39,23 @@ class PublisherService
             return $log;
         }
 
+        // Batas plan: publish/bulan (referensi per merchant).
+        $merchant = $channel->merchant()->first();
+        if ($merchant) {
+            $limits = BillingController::limits($merchant);
+            if ($limits['max_publishes_monthly'] !== null
+                && $merchant->publishes_this_month >= $limits['max_publishes_monthly']) {
+                $log->update([
+                    'status' => 'failed',
+                    'error' => "Batas publish plan {$merchant->plan_code}: maksimal "
+                        ."{$limits['max_publishes_monthly']} publish/bulan. Upgrade di halaman Langganan.",
+                    'meta' => null,
+                ]);
+
+                return $log;
+            }
+        }
+
         $result = match ($channel->platform) {
             'facebook' => $this->facebook->publish($product, $channel),
             'instagram' => $this->instagram->publish($product, $channel),
@@ -57,6 +76,9 @@ class PublisherService
         }
 
         if ($result['ok']) {
+            if ($merchant) {
+                $merchant->increment('publishes_this_month');
+            }
             $log->update([
                 'status' => 'success',
                 'external_id' => $result['external_id'] ?? null,

@@ -31,6 +31,14 @@ export default function SellerLayout() {
             <NavLink to="/seller/orders" className={link}>
               Pesanan
             </NavLink>
+            <NavLink to="/seller/billing" className={link}>
+              Langganan
+            </NavLink>
+            {user?.role === 'admin' && (
+              <NavLink to="/seller/admin" className={link}>
+                Admin
+              </NavLink>
+            )}
           </nav>
 
           <div className="ml-auto flex items-center gap-3">

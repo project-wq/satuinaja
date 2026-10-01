@@ -8,6 +8,8 @@ import Dashboard from './pages/Seller/Dashboard'
 import Products from './pages/Seller/Products'
 import Channels from './pages/Seller/Channels'
 import Orders from './pages/Seller/Orders'
+import Billing from './pages/Seller/Billing'
+import Admin from './pages/Seller/Admin'
 import Shop from './pages/Shop'
 import ProductDetail from './pages/ProductDetail'
 import Checkout from './pages/Checkout'
@@ -65,6 +67,8 @@ export default function App() {
         <Route path="products" element={<Products />} />
         <Route path="channels" element={<Channels />} />
         <Route path="orders" element={<Orders />} />
+        <Route path="billing" element={<Billing />} />
+        <Route path="admin" element={<Admin />} />
       </Route>
 
       {/* Storefront publik */}

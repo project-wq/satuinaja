@@ -11,6 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+use App\Models\Merchant;
+
 class ChannelController extends Controller
 {
     public function __construct(private PublisherService $publisher)
@@ -77,6 +79,17 @@ class ChannelController extends Controller
             $channel->label = $data['label'];
         }
         if (array_key_exists('active', $data)) {
+            // Batas plan: channel aktif per merchant.
+            $merchant = $request->user()->merchant;
+        $limits = BillingController::limits($merchant);
+            if ($data['active'] && ! $channel->active
+                && $limits['max_channels'] !== null
+                && $merchant->channels()->where('active', true)->count() >= $limits['max_channels']) {
+                return response()->json([
+                    'error' => "Batas channel aktif plan {$merchant->plan_code}: maksimal {$limits['max_channels']}. "
+                        .'Upgrade di halaman Langganan.',
+                ], 403);
+            }
             $channel->active = $data['active'];
         }
         $channel->save();

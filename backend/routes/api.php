@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AdminController;
 use App\Http\Controllers\Api\V1\AiController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\ChannelController;
 use App\Http\Controllers\Api\V1\CheckoutController;
 use App\Http\Controllers\Api\V1\ProductController;
@@ -62,6 +64,18 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
 
     Route::post('ai/caption', [AiController::class, 'caption']);
     Route::post('ai/preview', [AiController::class, 'preview']);
+
+    // Langganan & batas plan
+    Route::get('billing', [BillingController::class, 'index']);
+    Route::post('billing/subscribe', [BillingController::class, 'subscribe']);
+
+    // Admin (Fase 4)
+    Route::prefix('admin')->group(function () {
+        Route::get('stats', [AdminController::class, 'stats']);
+        Route::get('merchants', [AdminController::class, 'merchants']);
+        Route::put('merchants/{merchant}/status', [AdminController::class, 'setMerchantStatus']);
+        Route::put('merchants/{merchant}/plan', [AdminController::class, 'setPlan']);
+    });
 
     Route::get('orders', [CheckoutController::class, 'index']);
     Route::get('orders/{order}', [CheckoutController::class, 'show']);

@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'user_id', 'name', 'slug', 'logo_path', 'description',
     'phone', 'address', 'city_id', 'active',
+    'plan_code', 'publishes_this_month', 'last_publish_reset_at',
 ])]
 class Merchant extends Model
 {

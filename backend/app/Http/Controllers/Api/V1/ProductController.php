@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Merchant;
 use App\Jobs\PublishToChannel;
 use App\Models\Product;
 use App\Support\Audit;
@@ -28,6 +29,16 @@ class ProductController extends Controller
     public function store(Request $request): JsonResponse
     {
         $merchant = $request->user()->merchant;
+
+        // Batas plan: max produk per merchant.
+        $limits = BillingController::limits($merchant);
+        if ($limits['max_products'] !== null
+            && $merchant->products()->count() >= $limits['max_products']) {
+            return response()->json([
+                'error' => "Batas produk plan {$merchant->plan_code}: maksimal {$limits['max_products']}. "
+                    .'Upgrade di halaman Langganan.',
+            ], 403);
+        }
 
         $data = $request->validate([
             'title' => ['required', 'string', 'max:160'],
