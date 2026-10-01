@@ -22,6 +22,9 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
     Route::post('auth/login', [AuthController::class, 'login']);
     Route::post('auth/register', [AuthController::class, 'register']);
 
+    // Spesifikasi platform & field kredensial (dipakai form channel)
+    Route::get('platforms', [ChannelController::class, 'platforms']);
+
     // Storefront publik
     Route::get('shops', [StorefrontController::class, 'index']);
     Route::get('shops/{slug}', [StorefrontController::class, 'show']);
@@ -55,6 +58,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     Route::put('channels/{channel}', [ChannelController::class, 'update']);
     Route::delete('channels/{channel}', [ChannelController::class, 'destroy']);
     Route::post('channels/{channel}/verify', [ChannelController::class, 'verify']);
+    Route::get('channels/{channel}/logs', [ChannelController::class, 'logs']);
 
     Route::post('ai/caption', [AiController::class, 'caption']);
     Route::post('ai/preview', [AiController::class, 'preview']);

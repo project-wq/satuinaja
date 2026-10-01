@@ -56,6 +56,14 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | URL publik untuk aset (gambar). Bisa berbeda dari APP_URL saat dev
+    | (mis. APP_URL=http://127.0.0.1:8123 tapi gambar diakses via domain publik).
+    |--------------------------------------------------------------------------
+    */
+    'public_url' => env('APP_PUBLIC_URL', env('APP_URL', 'http://localhost')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

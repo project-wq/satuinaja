@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'product_id', 'channel_id', 'status', 'external_id',
-    'external_url', 'error', 'published_at',
+    'external_url', 'error', 'meta', 'published_at',
 ])]
 class PublishLog extends Model
 {
@@ -18,6 +18,7 @@ class PublishLog extends Model
 
     protected $casts = [
         'published_at' => 'datetime',
+        'meta' => 'array',
     ];
 
     public function product(): BelongsTo

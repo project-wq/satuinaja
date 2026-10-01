@@ -23,7 +23,9 @@ class AuthController extends Controller
     {
         $data = $request->validate([
             'email' => ['required', 'email'],
-            'password' => ['required', 'string', 'min:8'],
+            // Login tidak menuntut panjang minimum: password lama pengguna bisa
+            // lebih pendek. Aturan kekuatan hanya berlaku saat registrasi.
+            'password' => ['required', 'string'],
         ]);
 
         $key = 'login:'.Str::lower($data['email']).'|'.$request->ip();
