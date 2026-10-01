@@ -102,8 +102,36 @@ export interface Channel {
   label: string | null
   active: boolean
   credential_keys: string[]
+  supported: boolean
   last_sync_at: string | null
   last_error: string | null
+}
+
+export interface PlatformField {
+  key: string
+  label: string
+  secret: boolean
+  placeholder: string
+}
+
+export interface PlatformSpec {
+  key: string
+  name: string
+  supported: boolean
+  note: string
+  fields: PlatformField[]
+}
+
+export interface PublishRecord {
+  id: number
+  channel_id: number
+  status: 'pending' | 'success' | 'failed'
+  external_id: string | null
+  external_url: string | null
+  error: string | null
+  meta: { caption?: string; payload?: Record<string, unknown> } | null
+  published_at: string | null
+  product: { id: number; title: string; slug: string } | null
 }
 
 export interface Order {

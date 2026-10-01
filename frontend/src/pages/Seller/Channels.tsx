@@ -1,67 +1,30 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type Channel } from '../../services/api'
-
-const PLATFORMS = [
-  {
-    key: 'facebook',
-    name: 'Facebook Page',
-    fields: [
-      { key: 'page_id', label: 'Page ID', placeholder: '1234567890' },
-      { key: 'page_token', label: 'Page Access Token', placeholder: 'EAAG...', secret: true },
-    ],
-    note: 'Butuh Meta App + Page Access Token long-lived.',
-  },
-  {
-    key: 'instagram',
-    name: 'Instagram Business',
-    fields: [
-      { key: 'ig_user_id', label: 'IG Business Account ID', placeholder: '178414...' },
-      { key: 'page_token', label: 'Access Token (FB App)', placeholder: 'EAAG...', secret: true },
-    ],
-    note: 'IG wajib terhubung ke Facebook Page.',
-  },
-  {
-    key: 'tiktok',
-    name: 'TikTok / TikTok Shop',
-    fields: [
-      { key: 'app_key', label: 'App Key', placeholder: '' },
-      { key: 'app_secret', label: 'App Secret', placeholder: '', secret: true },
-      { key: 'access_token', label: 'Access Token', placeholder: '', secret: true },
-    ],
-    note: 'Perlu approval TikTok for Developers.',
-  },
-  {
-    key: 'shopee',
-    name: 'Shopee',
-    fields: [
-      { key: 'partner_id', label: 'Partner ID', placeholder: '' },
-      { key: 'partner_key', label: 'Partner Key', placeholder: '', secret: true },
-      { key: 'shop_id', label: 'Shop ID', placeholder: '' },
-      { key: 'access_token', label: 'Access Token', placeholder: '', secret: true },
-    ],
-    note: 'Wajib daftar Shopee Open Platform.',
-  },
-  {
-    key: 'tokopedia',
-    name: 'Tokopedia',
-    fields: [
-      { key: 'client_id', label: 'Client ID', placeholder: '' },
-      { key: 'client_secret', label: 'Client Secret', placeholder: '', secret: true },
-      { key: 'fs_id', label: 'FS ID (toko)', placeholder: '' },
-    ],
-    note: 'Akses via Tokopedia Partner.',
-  },
-] as const
+import { api, type Channel, type PlatformSpec, type PublishRecord } from '../../services/api'
 
 export default function Channels() {
   const qc = useQueryClient()
   const [open, setOpen] = useState<string | null>(null)
+  const [history, setHistory] = useState<number | null>(null)
   const [toast, setToast] = useState('')
+
+  // Spesifikasi platform (field, label, catatan) diambil dari backend
+  // supaya form selalu sinkron dengan service yang benar-benar ada.
+  const { data: specs } = useQuery({
+    queryKey: ['platforms'],
+    queryFn: () => api.get<{ data: PlatformSpec[] }>('/platforms'),
+    staleTime: 5 * 60_000,
+  })
 
   const { data } = useQuery({
     queryKey: ['channels'],
     queryFn: () => api.get<{ data: Channel[] }>('/channels'),
+  })
+
+  const { data: logs } = useQuery({
+    queryKey: ['channel-logs', history],
+    queryFn: () => api.get<{ data: PublishRecord[] }>(`/channels/${history}/logs`),
+    enabled: history !== null,
   })
 
   const save = useMutation({
@@ -70,7 +33,7 @@ export default function Channels() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['channels'] })
       setOpen(null)
-      setToast('Kredensial tersimpan (terenkripsi).')
+      setToast('Kredensial tersimpan (terenkripsi AES-256).')
     },
     onError: (e) => setToast(e instanceof Error ? e.message : 'Gagal simpan'),
   })
@@ -83,8 +46,8 @@ export default function Channels() {
   })
 
   const verify = useMutation({
-    mutationFn: (id: number) => api.post<{ ok: boolean; error?: string }>(`/channels/${id}/verify`),
-    onSuccess: (r) => setToast(r.ok ? 'Koneksi OK.' : `Gagal: ${r.error}`),
+    mutationFn: (id: number) => api.post<{ ok: boolean; error?: string; data?: unknown }>(`/channels/${id}/verify`),
+    onSuccess: (r) => setToast(r.ok ? `Koneksi OK: ${JSON.stringify(r.data)}` : `Gagal: ${r.error}`),
     onError: (e) => setToast(e instanceof Error ? e.message : 'Verifikasi gagal'),
   })
 
@@ -95,8 +58,8 @@ export default function Channels() {
       <div>
         <h1 className="text-2xl font-bold">Channel</h1>
         <p className="text-sm text-slate-500 mt-1">
-          Masukkan API key / login tiap platform. Kredensial dienkripsi AES-256 dan tidak pernah dikirim balik
-          ke browser.
+          Masukkan API key / login tiap platform. Kredensial dienkripsi AES-256 dan tidak pernah dikirim
+          balik ke browser.
         </p>
       </div>
 
@@ -108,7 +71,7 @@ export default function Channels() {
       )}
 
       <div className="grid md:grid-cols-2 gap-4">
-        {PLATFORMS.map((p) => {
+        {(specs?.data ?? []).map((p) => {
           const ch = byPlatform.get(p.key)
           return (
             <div key={p.key} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
@@ -127,9 +90,7 @@ export default function Channels() {
               </div>
 
               {ch && ch.credential_keys.length > 0 && (
-                <p className="text-xs text-slate-400">
-                  Kunci tersimpan: {ch.credential_keys.join(', ')}
-                </p>
+                <p className="text-xs text-slate-400">Kunci tersimpan: {ch.credential_keys.join(', ')}</p>
               )}
 
               {ch?.last_error && (
@@ -159,6 +120,12 @@ export default function Channels() {
                     >
                       {verify.isPending ? 'Menguji…' : 'Uji koneksi'}
                     </button>
+                    <button
+                      onClick={() => setHistory(history === ch.id ? null : ch.id)}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50"
+                    >
+                      {history === ch.id ? 'Tutup riwayat' : 'Riwayat publish'}
+                    </button>
                   </>
                 )}
               </div>
@@ -182,7 +149,7 @@ export default function Channels() {
                       <span className="text-xs font-medium text-slate-700">{f.label}</span>
                       <input
                         name={f.key}
-                        type={'secret' in f && f.secret ? 'password' : 'text'}
+                        type={f.secret ? 'password' : 'text'}
                         placeholder={f.placeholder}
                         autoComplete="off"
                         className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -196,6 +163,67 @@ export default function Channels() {
                     {save.isPending ? 'Menyimpan…' : 'Simpan'}
                   </button>
                 </form>
+              )}
+
+              {history === ch?.id && logs && (
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <h3 className="text-xs font-semibold text-slate-600">Riwayat publish</h3>
+                  {logs.data.length === 0 && <p className="text-xs text-slate-400">Belum ada.</p>}
+                  {logs.data.map((r) => (
+                    <div key={r.id} className="text-xs rounded-lg border border-slate-100 p-3 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">{r.product?.title ?? '—'}</span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded ${
+                            r.status === 'success'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : r.status === 'failed'
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {r.status}
+                        </span>
+                      </div>
+
+                      {r.external_url && (
+                        <a
+                          href={r.external_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sky-600 underline break-all"
+                        >
+                          {r.external_url}
+                        </a>
+                      )}
+
+                      {r.error && <p className="text-rose-600">{r.error}</p>}
+
+                      {/* Sistem menyiapkan caption / payload ketika publish butuh
+                          aksi tambahan (TikTok video, Tokopedia kemitraan). */}
+                      {r.meta?.caption && (
+                        <div className="bg-slate-50 rounded p-2">
+                          <p className="text-[10px] uppercase text-slate-400 mb-1">Caption siap pakai</p>
+                          <p className="whitespace-pre-wrap text-slate-700">{r.meta.caption}</p>
+                        </div>
+                      )}
+                      {r.meta?.payload && (
+                        <div className="bg-slate-50 rounded p-2">
+                          <p className="text-[10px] uppercase text-slate-400 mb-1">Payload siap-tempel</p>
+                          <pre className="overflow-x-auto text-[10px] text-slate-700">
+                            {JSON.stringify(r.meta.payload, null, 2)}
+                          </pre>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(JSON.stringify(r.meta!.payload, null, 2))}
+                            className="mt-1 text-[10px] px-2 py-0.5 rounded border border-slate-300 hover:bg-white"
+                          >
+                            Salin JSON
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )
