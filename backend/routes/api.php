@@ -7,7 +7,10 @@ use App\Http\Controllers\Api\V1\BalanceController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\ChannelController;
 use App\Http\Controllers\Api\V1\CheckoutController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProductController;
+use App\Http\Controllers\Api\V1\RefundController;
+use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ShippingController;
 use App\Http\Controllers\Api\V1\StorefrontController;
 use App\Http\Controllers\Api\V1\WebhookController;
@@ -78,11 +81,15 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
         Route::put('merchants/{merchant}/status', [AdminController::class, 'setMerchantStatus']);
         Route::put('merchants/{merchant}/plan', [AdminController::class, 'setPlan']);
 
-        // Fase 5: konfigurasi fee + kelola withdraw
+        // Fase 5: konfigurasi fee + kelola withdraw + refund
         Route::get('settings', [AdminController::class, 'settings']);
         Route::put('settings', [AdminController::class, 'updateSettings']);
         Route::get('withdrawals', [AdminController::class, 'withdrawals']);
         Route::put('withdrawals/{withdrawal}', [AdminController::class, 'processWithdrawal']);
+
+        // Fase 6: putuskan refund
+        Route::get('refunds', [RefundController::class, 'adminIndex']);
+        Route::put('refunds/{refund}', [RefundController::class, 'process']);
     });
 
     // Fase 5: saldo seller + withdraw (merchant login)
@@ -94,4 +101,18 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     Route::get('orders', [CheckoutController::class, 'index']);
     Route::get('orders/{order}', [CheckoutController::class, 'show']);
     Route::put('orders/{order}/ship', [CheckoutController::class, 'ship']);
+
+    // Fase 6: refund oleh seller
+    Route::get('refunds', [RefundController::class, 'index']);
+    Route::post('refunds', [RefundController::class, 'store']);
+
+    // Fase 6: laporan penjualan
+    Route::get('reports/sales', [ReportController::class, 'sales']);
+    Route::get('reports/sales/export', [ReportController::class, 'export']);
+
+    // Fase 6: notifikasi in-app
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::post('notifications/read-all', [NotificationController::class, 'readAll']);
+    Route::put('notifications/{notification}/read', [NotificationController::class, 'read']);
+    Route::delete('notifications/{notification}', [NotificationController::class, 'destroy']);
 });

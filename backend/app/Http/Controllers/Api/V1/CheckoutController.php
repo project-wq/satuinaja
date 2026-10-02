@@ -192,6 +192,14 @@ class CheckoutController extends Controller
         ]);
         Audit::record('order.shipped', $order, ['tracking_no' => $order->tracking_no]);
 
+        $this->notif->push(
+            $order->merchant_id,
+            'order.shipped',
+            'Order ditandai terkirim',
+            "Order {$order->order_no} dikirim dengan resi {$order->tracking_no}.",
+            '/seller/orders',
+        );
+
         return response()->json(['data' => $order->fresh()]);
     }
 

@@ -120,6 +120,14 @@ class WebhookController extends Controller
                 'ends_at' => $endsAt->toDateTimeString(),
             ]);
 
+            $this->notif->push(
+                $subscription->merchant_id,
+                'plan.activated',
+                'Langganan aktif',
+                "Plan {$subscription->plan_code} aktif sampai {$endsAt->format('d M Y')}.",
+                '/seller/billing',
+            );
+
             return response()->json(['message' => 'Plan aktif.']);
         }
 
