@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Ledger mutasi saldo seller (append-only, jangan diedit).
- * type: sale | withdraw_hold | withdraw_paid | withdraw_refund | adjustment
+ * type: sale | withdraw_hold | withdraw_paid | withdraw_refund | refund_paid | adjustment
  */
 class BalanceTransaction extends Model
 {
