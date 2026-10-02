@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('reason', 255)->nullable();
             $table->string('status', 20)->default('pending');        // pending | approved | rejected
             $table->text('note')->nullable();                        // catatan admin/penolakan
+            $table->foreignId('processed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('processed_at')->nullable();
             $table->timestamps();
 

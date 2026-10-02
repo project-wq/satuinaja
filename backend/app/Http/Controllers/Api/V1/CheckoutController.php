@@ -19,6 +19,7 @@ class CheckoutController extends Controller
     public function __construct(
         private MidtransService $midtrans,
         private FeeService $fee,
+        private \App\Services\NotificationService $notif,
     ) {
     }
 
@@ -138,6 +139,14 @@ class CheckoutController extends Controller
 
         $snap = $this->midtrans->createSnap($order->load('items'));
         Audit::record('order.created', $order, ['order_no' => $order->order_no]);
+
+        $this->notif->push(
+            $merchant->id,
+            'order.new',
+            'Pesanan baru masuk',
+            "Order {$order->order_no} dari {$order->buyer_name}. Total Rp".number_format($order->total, 0, ',', '.').'.',
+            '/seller/orders',
+        );
 
         return response()->json([
             'data' => [

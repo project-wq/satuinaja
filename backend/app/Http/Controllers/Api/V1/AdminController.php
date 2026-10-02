@@ -193,7 +193,7 @@ class AdminController extends Controller
     }
 
     /** Approve (uang keluar) / reject (saldo dikembalikan). */
-    public function processWithdrawal(Request $request, Withdrawal $withdrawal, BalanceService $balance): JsonResponse
+    public function processWithdrawal(Request $request, Withdrawal $withdrawal, BalanceService $balance, \App\Services\NotificationService $notif): JsonResponse
     {
         $this->ensureAdmin();
         $data = $request->validate([
@@ -212,6 +212,16 @@ class AdminController extends Controller
         Audit::record('admin.withdrawal.'.$wd->status, $wd, [
             'amount' => $wd->amount, 'note' => $data['note'] ?? null,
         ]);
+
+        $notif->push(
+            $wd->merchant_id,
+            'withdrawal.status',
+            $data['decision'] === 'approved' ? 'Penarikan disetujui' : 'Penarikan ditolak',
+            $data['decision'] === 'approved'
+                ? 'Penarikan Rp'.number_format($wd->amount, 0, ',', '.').' disetujui, dana akan ditransfer.'
+                : 'Penarikan Rp'.number_format($wd->amount, 0, ',', '.').' ditolak, saldo dikembalikan.'.($data['note'] ? " Alasan: {$data['note']}" : ''),
+            '/seller/balance',
+        );
 
         return response()->json(['data' => ['id' => $wd->id, 'status' => $wd->status]]);
     }

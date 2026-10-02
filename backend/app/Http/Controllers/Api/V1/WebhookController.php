@@ -20,6 +20,7 @@ class WebhookController extends Controller
     public function __construct(
         private MidtransService $midtrans,
         private BalanceService $balance,
+        private \App\Services\NotificationService $notif,
     ) {
     }
 
@@ -71,6 +72,14 @@ class WebhookController extends Controller
         // Order lunas -> masukkan pendapatan seller ((harga-diskon-500) x qty) ke saldo.
         if ($paymentStatus === 'paid' && ! $wasPaid) {
             $this->balance->creditOrder($order->fresh());
+
+            $this->notif->push(
+                $order->merchant_id,
+                'payment.settled',
+                'Pembayaran diterima',
+                "Order {$order->order_no} lunas. Pendapatan bersih Rp".number_format($order->seller_net, 0, ',', '.').' masuk ke saldo.',
+                '/seller/balance',
+            );
         }
 
         Audit::record('order.payment.'.$paymentStatus, $order, [

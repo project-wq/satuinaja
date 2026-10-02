@@ -61,6 +61,46 @@ class BalanceService
     }
 
     /**
+     * Tarik kembali pendapatan order dari saldo seller saat refund disetujui.
+     * Idempotent: ditandai lewat ledger `refund_paid` untuk order tsb.
+     * Saldo boleh negatif bila seller sudah menarik dananya (jadi utang).
+     */
+    public function refundOrder(Order $order, ?string $note = null): bool
+    {
+        if ($order->seller_net <= 0) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($order, $note) {
+            $exists = BalanceTransaction::where('type', 'refund_paid')
+                ->where('order_id', $order->id)
+                ->lockForUpdate()
+                ->exists();
+            if ($exists) {
+                return false;
+            }
+
+            $bal = SellerBalance::where('merchant_id', $order->merchant_id)
+                ->lockForUpdate()
+                ->first() ?? SellerBalance::create(['merchant_id' => $order->merchant_id]);
+
+            $bal->balance -= $order->seller_net;
+            $bal->save();
+
+            BalanceTransaction::create([
+                'merchant_id' => $order->merchant_id,
+                'type' => 'refund_paid',
+                'amount' => -$order->seller_net,
+                'balance_after' => $bal->balance,
+                'order_id' => $order->id,
+                'note' => $note ?? "Pengembalian dana order {$order->order_no}",
+            ]);
+
+            return true;
+        });
+    }
+
+    /**
      * Ajukan withdraw: pindahkan balance -> held. Gagal kalau kurang.
      * @throws \RuntimeException
      */
