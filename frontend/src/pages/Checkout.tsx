@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Header, { rupiah } from '../components/ShopHeader'
 import { useCart } from '../store'
@@ -8,6 +8,16 @@ interface CostResult {
   ok: boolean
   data?: { services: { service: string; description: string; cost: number; etd: string }[] }
   error?: string
+}
+
+interface FeePreview {
+  subtotal: number
+  discount_total: number
+  subtotal_sale: number
+  buyer_fee: number
+  buyer_admin_fee: number
+  shipping_cost: number
+  total: number
 }
 
 export default function Checkout() {
@@ -28,9 +38,31 @@ export default function Checkout() {
   const [loadingCost, setLoadingCost] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [fee, setFee] = useState<FeePreview | null>(null)
 
   const totalWeight = items.reduce((a, i) => a + i.weight * i.qty, 0)
   const sub = subtotal()
+
+  // Rincian biaya live dari server (fee 11% + admin + diskon) setiap isi berubah.
+  useEffect(() => {
+    let stale = false
+    if (items.length === 0) return
+    api
+      .post<{ data: FeePreview }>('/checkout/preview', {
+        merchant_slug: shopSlug,
+        items: items.map((i) => ({ product_id: i.productId, qty: i.qty })),
+        shipping_cost: selected?.cost ?? 0,
+      })
+      .then((r) => {
+        if (!stale) setFee(r.data)
+      })
+      .catch(() => {
+        if (!stale) setFee(null)
+      })
+    return () => {
+      stale = true
+    }
+  }, [items, shopSlug, selected?.cost])
 
   async function cekOngkir() {
     setLoadingCost(true)
@@ -255,17 +287,38 @@ export default function Checkout() {
           <div className="bg-white rounded-xl border border-slate-200 p-5 sticky top-24 space-y-3">
             <h2 className="font-semibold">Ringkasan</h2>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Subtotal</span>
-              <span>{rupiah(sub)}</span>
+              <span className="text-slate-500">Subtotal ({items.reduce((a, i) => a + i.qty, 0)} produk)</span>
+              <span>{rupiah(fee?.subtotal ?? sub)}</span>
             </div>
+            {fee && fee.discount_total > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Diskon</span>
+                <span className="text-emerald-600">−{rupiah(fee.discount_total)}</span>
+              </div>
+            )}
+            {fee && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Fee layanan (11%)</span>
+                <span>{rupiah(fee.buyer_fee)}</span>
+              </div>
+            )}
+            {fee && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Biaya admin</span>
+                <span>{fee.buyer_admin_fee > 0 ? rupiah(fee.buyer_admin_fee) : '—'}</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">Ongkir ({totalWeight} g)</span>
               <span>{selected ? rupiah(selected.cost) : '—'}</span>
             </div>
             <div className="flex justify-between font-bold pt-3 border-t border-slate-100">
               <span>Total</span>
-              <span>{rupiah(sub + (selected?.cost ?? 0))}</span>
+              <span>{rupiah(fee?.total ?? sub + (selected?.cost ?? 0))}</span>
             </div>
+            <p className="text-[11px] text-slate-400">
+              Fee 11% + biaya admin Rp1.000 per produk ditanggung pembeli, sesuai kebijakan toko.
+            </p>
 
             {error && <p className="text-sm text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
 

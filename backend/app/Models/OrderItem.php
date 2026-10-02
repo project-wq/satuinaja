@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'order_id', 'product_id', 'title', 'price', 'qty', 'line_total',
+    'order_id', 'product_id', 'title', 'price', 'discount_price',
+    'qty', 'line_total', 'buyer_fee', 'buyer_admin_fee', 'seller_net',
 ])]
 class OrderItem extends Model
 {
@@ -17,8 +18,12 @@ class OrderItem extends Model
 
     protected $casts = [
         'price' => 'integer',
+        'discount_price' => 'integer',
         'qty' => 'integer',
         'line_total' => 'integer',
+        'buyer_fee' => 'integer',
+        'buyer_admin_fee' => 'integer',
+        'seller_net' => 'integer',
     ];
 
     public function order(): BelongsTo

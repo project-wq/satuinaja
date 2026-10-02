@@ -70,7 +70,8 @@ export default function ProductDetail() {
 
           <div>
             <h1 className="text-2xl font-bold">{product.title}</h1>
-            <p className="text-3xl font-bold mt-3">{rupiah(product.price)}</p>
+            <p className="mt-3 text-slate-400 text-sm line-through">{rupiah(product.price)}</p>
+            <p className="text-3xl font-bold mt-1">{rupiah(product.discount_price ?? product.price)}</p>
             <p className="text-sm text-slate-500 mt-2">
               Berat {product.weight} g · {product.stock > 0 ? `Stok ${product.stock}` : 'Stok habis'}
             </p>
@@ -103,7 +104,7 @@ export default function ProductDetail() {
                     productId: product.id,
                     slug: product.slug,
                     title: product.title,
-                    price: product.price,
+                    price: product.discount_price ?? product.price,
                     weight: product.weight,
                     image: images[0],
                     qty,

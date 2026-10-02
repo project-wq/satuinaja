@@ -68,7 +68,7 @@ class StorefrontTest extends TestCase
             'items' => [['product_id' => $product->id, 'qty' => 3]],
         ])->assertCreated();
 
-        $this->assertSame(50000 * 3 + 18000, $res->json('data.total'));
+        $this->assertSame(50000 * 3 + (int) round(150000 * 0.11) + 3 * 1000 + 18000, $res->json('data.total'));
         $this->assertSame(7, $product->fresh()->stock, 'Stok tidak berkurang.');
         $this->assertDatabaseHas('orders', ['payment_status' => 'unpaid']);
         $this->assertDatabaseCount('order_items', 1);

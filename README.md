@@ -5,7 +5,9 @@ Platform **multichannel seller** untuk penjual online Indonesia. Upload produk *
 - tayang otomatis di **storefront publik** milik sendiri (`/:slug-toko`) — lengkap dengan katalog, keranjang, checkout, dan lacak pesanan;
 - dipublikasikan ke **Facebook Page, Instagram Business, TikTok, Shopee, dan Tokopedia**;
 - dilengkapi **cek ongkir** (RajaOngkir), **lacak resi** (BinderByte), **AI caption** (gateway OpenAI-compatible), dan **payment gateway** (Midtrans);
-- punya sistem **langganan seller** (Free/Pro/Bisnis) dengan batas produk, channel aktif, dan publish bulanan — dibayar via Midtrans — plus **panel admin** (statistik, ganti plan, ban merchant) dan **sinkron stok otomatis** ke channel.
+- punya sistem **langganan seller** (Free/Pro/Bisnis) dengan batas produk, channel aktif, dan publish bulanan — dibayar via Midtrans — plus **panel admin** (statistik, ganti plan, ban merchant) dan **sinkron stok otomatis** ke channel;
+- sistem **fee marketplace ala Shopee**: pembeli bayar `(harga − diskon) + fee 11% + biaya admin Rp1.000/unit + ongkir`, seller menerima `(harga − diskon) − Rp500/unit` ke **saldo seller** otomatis saat order lunas, lengkap dengan **penarikan saldo** (withdraw ke rekening, disetujui admin) dan **riwayat mutasi saldo**;
+- **panel admin lengkap**: kelola merchant (plan, ban), setujui/tolak penarikan saldo, dan atur **konfigurasi fee** (persen fee pembeli, admin fee/unit, potongan seller/unit) — semua endpoint admin terpisah dari panel seller.
 
 Repo: https://github.com/project-wq/satuinaja
 

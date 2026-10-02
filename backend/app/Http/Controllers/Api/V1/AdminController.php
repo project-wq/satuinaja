@@ -8,7 +8,10 @@ use App\Models\Channel;
 use App\Models\Merchant;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Setting;
 use App\Models\User;
+use App\Models\Withdrawal;
+use App\Services\BalanceService;
 use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -122,5 +125,94 @@ class AdminController extends Controller
         Audit::record('admin.plan.changed', $merchant, ['plan' => $data['plan_code']]);
 
         return response()->json(['data' => ['id' => $merchant->id, 'plan_code' => $merchant->fresh()->plan_code]]);
+    }
+
+    // ---- Fase 5: konfigurasi fee + kelola withdraw ----
+
+    /** Baca konfigurasi fee (dipakai halaman pengaturan admin). */
+    public function settings(): JsonResponse
+    {
+        $this->ensureAdmin();
+
+        return response()->json(['data' => [
+            'fee_buyer_percent' => (int) Setting::get('fee_buyer_percent', '11'),
+            'admin_fee_per_item' => (int) Setting::get('admin_fee_per_item', '1000'),
+            'seller_fee_per_item' => (int) Setting::get('seller_fee_per_item', '500'),
+        ]]);
+    }
+
+    /** Ubah konfigurasi fee. */
+    public function updateSettings(Request $request): JsonResponse
+    {
+        $this->ensureAdmin();
+        $data = $request->validate([
+            'fee_buyer_percent' => ['sometimes', 'integer', 'min:0', 'max:100'],
+            'admin_fee_per_item' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
+            'seller_fee_per_item' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
+        ]);
+
+        foreach ($data as $key => $value) {
+            Setting::set($key, (string) $value);
+        }
+
+        Audit::record('admin.settings.updated', null, $data);
+
+        return response()->json(['data' => $this->settings()->getData(true)['data']]);
+    }
+
+    /** Daftar semua permintaan withdraw (filter status opsional). */
+    public function withdrawals(Request $request): JsonResponse
+    {
+        $this->ensureAdmin();
+
+        $q = Withdrawal::with('merchant.user')
+            ->when($request->query('status'), fn ($q, $s) => $q->where('status', $s))
+            ->latest();
+
+        $page = $q->paginate(20, ['*'], 'page', (int) $request->query('page', 1));
+
+        return response()->json([
+            'data' => $page->map(fn ($w) => [
+                'id' => $w->id,
+                'merchant' => $w->merchant?->name,
+                'amount' => $w->amount,
+                'bank_name' => $w->bank_name,
+                'bank_account_no' => $w->bank_account_no,
+                'bank_account_holder' => $w->bank_account_holder,
+                'status' => $w->status,
+                'admin_note' => $w->admin_note,
+                'created_at' => $w->created_at,
+                'processed_at' => $w->processed_at,
+            ]),
+            'pagination' => [
+                'current_page' => $page->currentPage(),
+                'last_page' => $page->lastPage(),
+                'total' => $page->total(),
+            ],
+        ]);
+    }
+
+    /** Approve (uang keluar) / reject (saldo dikembalikan). */
+    public function processWithdrawal(Request $request, Withdrawal $withdrawal, BalanceService $balance): JsonResponse
+    {
+        $this->ensureAdmin();
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['approved', 'rejected'])],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            $wd = $balance->processWithdraw(
+                $withdrawal, $data['decision'], $request->user()->id, $data['note'] ?? null,
+            );
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        Audit::record('admin.withdrawal.'.$wd->status, $wd, [
+            'amount' => $wd->amount, 'note' => $data['note'] ?? null,
+        ]);
+
+        return response()->json(['data' => ['id' => $wd->id, 'status' => $wd->status]]);
     }
 }

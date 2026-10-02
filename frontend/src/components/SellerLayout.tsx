@@ -34,6 +34,9 @@ export default function SellerLayout() {
             <NavLink to="/seller/billing" className={link}>
               Langganan
             </NavLink>
+            <NavLink to="/seller/balance" className={link}>
+              Saldo
+            </NavLink>
             {user?.role === 'admin' && (
               <NavLink to="/seller/admin" className={link}>
                 Admin

@@ -89,6 +89,7 @@ export interface Product {
   slug: string
   description: string | null
   price: number
+  discount_price: number | null
   stock: number
   weight: number
   images: string[] | null

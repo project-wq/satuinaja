@@ -12,7 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'merchant_id', 'order_no', 'buyer_name', 'buyer_phone', 'buyer_email',
     'shipping_address', 'destination_city_id', 'courier', 'service',
-    'shipping_cost', 'subtotal', 'total', 'tracking_no',
+    'shipping_cost', 'subtotal', 'discount_total', 'subtotal_sale',
+    'buyer_fee', 'buyer_admin_fee', 'seller_net', 'total', 'tracking_no',
     'payment_status', 'payment_ref', 'payment_url', 'fulfillment_status',
 ])]
 class Order extends Model
@@ -23,6 +24,11 @@ class Order extends Model
     protected $casts = [
         'shipping_cost' => 'integer',
         'subtotal' => 'integer',
+        'discount_total' => 'integer',
+        'subtotal_sale' => 'integer',
+        'buyer_fee' => 'integer',
+        'buyer_admin_fee' => 'integer',
+        'seller_net' => 'integer',
         'total' => 'integer',
     ];
 

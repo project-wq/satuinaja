@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'merchant_id', 'title', 'slug', 'description', 'price',
-    'stock', 'weight', 'images', 'status',
+    'discount_price', 'stock', 'weight', 'images', 'status',
 ])]
 class Product extends Model
 {
@@ -22,6 +22,7 @@ class Product extends Model
     protected $casts = [
         'images' => 'array',
         'price' => 'integer',
+        'discount_price' => 'integer',
         'stock' => 'integer',
         'weight' => 'integer',
     ];

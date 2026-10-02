@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AdminController;
 use App\Http\Controllers\Api\V1\AiController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BalanceController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\ChannelController;
 use App\Http\Controllers\Api\V1\CheckoutController;
@@ -38,6 +39,7 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
     Route::get('shipping/track', [ShippingController::class, 'track']);
 
     // Checkout & status order publik
+    Route::post('checkout/preview', [CheckoutController::class, 'preview']);
     Route::post('checkout', [CheckoutController::class, 'store']);
     Route::get('orders/track/{orderNo}', [CheckoutController::class, 'track']);
 });
@@ -75,7 +77,19 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
         Route::get('merchants', [AdminController::class, 'merchants']);
         Route::put('merchants/{merchant}/status', [AdminController::class, 'setMerchantStatus']);
         Route::put('merchants/{merchant}/plan', [AdminController::class, 'setPlan']);
+
+        // Fase 5: konfigurasi fee + kelola withdraw
+        Route::get('settings', [AdminController::class, 'settings']);
+        Route::put('settings', [AdminController::class, 'updateSettings']);
+        Route::get('withdrawals', [AdminController::class, 'withdrawals']);
+        Route::put('withdrawals/{withdrawal}', [AdminController::class, 'processWithdrawal']);
     });
+
+    // Fase 5: saldo seller + withdraw (merchant login)
+    Route::get('balance', [BalanceController::class, 'index']);
+    Route::get('balance/transactions', [BalanceController::class, 'transactions']);
+    Route::post('balance/withdraw', [BalanceController::class, 'withdraw']);
+    Route::get('balance/withdrawals', [BalanceController::class, 'withdrawals']);
 
     Route::get('orders', [CheckoutController::class, 'index']);
     Route::get('orders/{order}', [CheckoutController::class, 'show']);

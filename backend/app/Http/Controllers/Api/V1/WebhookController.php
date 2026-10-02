@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Services\BalanceService;
 use App\Services\MidtransService;
 use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
@@ -16,8 +17,10 @@ use Illuminate\Support\Facades\Log;
  */
 class WebhookController extends Controller
 {
-    public function __construct(private MidtransService $midtrans)
-    {
+    public function __construct(
+        private MidtransService $midtrans,
+        private BalanceService $balance,
+    ) {
     }
 
     public function midtrans(Request $request): JsonResponse
@@ -59,14 +62,21 @@ class WebhookController extends Controller
             default => $order->payment_status,
         };
 
+        $wasPaid = $order->payment_status === 'paid';
         $order->update([
             'payment_status' => $paymentStatus,
             'payment_ref' => $payload['transaction_id'] ?? $order->payment_ref,
         ]);
 
+        // Order lunas -> masukkan pendapatan seller ((harga-diskon-500) x qty) ke saldo.
+        if ($paymentStatus === 'paid' && ! $wasPaid) {
+            $this->balance->creditOrder($order->fresh());
+        }
+
         Audit::record('order.payment.'.$paymentStatus, $order, [
             'order_no' => $order->order_no,
             'transaction_status' => $status,
+            'seller_net' => $order->seller_net,
         ]);
 
         return response()->json(['message' => 'OK']);

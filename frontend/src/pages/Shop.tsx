@@ -60,7 +60,11 @@ export default function Shop() {
                 </div>
                 <div className="p-3">
                   <h3 className="text-sm font-medium line-clamp-2 min-h-[2.5rem]">{p.title}</h3>
-                  <p className="mt-1 font-bold">{rupiah(p.price)}</p>
+                  <p className="mt-1 font-bold">{rupiah(p.discount_price ?? p.price)}
+                  {p.discount_price != null && p.discount_price < p.price && (
+                    <span className="text-xs text-slate-400 line-through font-normal ml-1">{rupiah(p.price)}</span>
+                  )}
+                  </p>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {p.stock > 0 ? `Stok ${p.stock}` : 'Stok habis'}
                   </p>

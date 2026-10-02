@@ -33,16 +33,14 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        $user = User::factory()->create([
-            'name' => 'Demo Merchant',
-            'email' => 'demo@satuinaja.test',
-            'role' => 'merchant',
-        ]);
+        $user = User::updateOrCreate(['email' => 'demo@satuinaja.test'], [
+    'name' => 'Demo Merchant',
+    'role' => 'merchant',
+    'password' => bcrypt('demo1234'),
+]);
 
-        $merchant = Merchant::create([
+        $merchant = Merchant::updateOrCreate(['slug' => 'toko-demo'], [
             'user_id' => $user->id,
-            'name' => 'Toko Demo',
-            'slug' => 'toko-demo',
             'description' => 'Toko contoh untuk uji coba storefront.',
             'phone' => '081234567890',
             'address' => 'Jl. Contoh No. 1, Jakarta',
@@ -56,33 +54,34 @@ class DatabaseSeeder extends Seeder
             ['shopee', 'Shopee Toko Demo'],
             ['tiktok', 'TikTok Shop Toko Demo'],
         ] as [$platform, $label]) {
-            Channel::create([
-                'merchant_id' => $merchant->id,
-                'platform' => $platform,
-                'label' => $label,
+            Channel::updateOrCreate(
+                ['merchant_id' => $merchant->id, 'platform' => $platform],
+                ['label' => $label,
                 'credentials' => ['placeholder' => true],
                 'active' => false,
             ]);
         }
 
         foreach ([
-            ['Kaos Polos Cotton Combed 30s', 65000, 120],
-            ['Hoodie Fleece Premium', 185000, 45],
-            ['Kemeja Flanel Lengan Panjang', 145000, 60],
-            ['Celana Chino Slim Fit', 175000, 30],
-            ['Topi Baseball Custom', 55000, 200],
-        ] as $i => [$title, $price, $stock]) {
-            Product::create([
-                'merchant_id' => $merchant->id,
-                'title' => $title,
-                'slug' => Str::slug($title),
-                'description' => "{$title} — bahan berkualitas, jahitan rapi, ready stock.",
-                'price' => $price,
-                'stock' => $stock,
-                'weight' => 500,
-                'images' => [],
-                'status' => 'active',
-            ]);
+            ['Kaos Polos Cotton Combed 30s', 65000, null, 120],
+            ['Hoodie Fleece Premium', 185000, 169000, 45],
+            ['Kemeja Flanel Lengan Panjang', 145000, null, 60],
+            ['Celana Chino Slim Fit', 175000, 159000, 30],
+            ['Topi Baseball Custom', 55000, null, 200],
+        ] as $i => [$title, $price, $discount, $stock]) {
+            Product::updateOrCreate(
+                ['merchant_id' => $merchant->id, 'slug' => Str::slug($title)],
+                [
+                    'title' => $title,
+                    'description' => "{$title} — bahan berkualitas, jahitan rapi, ready stock.",
+                    'price' => $price,
+                    'discount_price' => $discount,
+                    'stock' => $stock,
+                    'weight' => 500,
+                    'images' => [],
+                    'status' => 'active',
+                ]
+            );
         }
     }
 }
