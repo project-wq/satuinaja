@@ -15,3 +15,5 @@ Artisan::command('inspire', function () {
 */
 Schedule::command('satu:billing-rotate')->dailyAt('00:05');
 Schedule::command('satu:sync-stock')->everyFiveMinutes();
+// Fase 7: two-way sync — tarik stok marketplace → lokal tiap 15 menit.
+Schedule::command('satu:sync-stock --pull')->everyFifteenMinutes();

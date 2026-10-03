@@ -132,6 +132,40 @@ class AdminController extends Controller
     /** Baca konfigurasi fee (dipakai halaman pengaturan admin). */
     public function settings(): JsonResponse
     {
+        $this->ensureAdmin();
+
+        return response()->json(['data' => [
+            'fee_buyer_percent' => (int) Setting::get('fee_buyer_percent', '11'),
+            'admin_fee_per_item' => (int) Setting::get('admin_fee_per_item', '1000'),
+            'seller_fee_per_item' => (int) Setting::get('seller_fee_per_item', '500'),
+        ]]);
+    }
+
+    // ---- Fase 7: status payment gateway (KYC Midtrans produksi) ----
+
+    /**
+     * Status kesiapan payment gateway + opsi mode. live ping ke Midtrans.
+     */
+    public function paymentGateway(\App\Services\MidtransService $midtrans): JsonResponse
+    {
+        $this->ensureAdmin();
+
+        return response()->json(['data' => $midtrans->readiness()]);
+    }
+
+    /** Ubah mode sandbox/production (overlay Setting, tak mengubah .env). */
+    public function updatePaymentGateway(Request $request, \App\Services\MidtransService $midtrans): JsonResponse
+    {
+        $this->ensureAdmin();
+        $data = $request->validate([
+            'sandbox' => ['required', 'boolean'],
+        ]);
+
+        Setting::set('midtrans_sandbox', $data['sandbox'] ? '1' : '0');
+        Audit::record('admin.payment_gateway.updated', null, ['sandbox' => $data['sandbox']]);
+
+        return response()->json(['data' => $midtrans->readiness()]);
+    }
 
     /** Ubah konfigurasi fee. */
     public function updateSettings(Request $request): JsonResponse

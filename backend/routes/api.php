@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\BalanceController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\ChannelController;
 use App\Http\Controllers\Api\V1\CheckoutController;
+use App\Http\Controllers\Api\V1\MarketplaceWebhookController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\RefundController;
@@ -50,6 +51,10 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
 // ---------- Webhook (signature-verified, tanpa auth) ----------
 Route::prefix('v1/webhooks')->middleware('throttle:api-public')->group(function () {
     Route::post('midtrans', [WebhookController::class, 'midtrans']);
+
+    // Fase 7: webhook order marketplace (HMAC atas raw body).
+    Route::post('shopee/{channel}', [MarketplaceWebhookController::class, 'shopee']);
+    Route::post('tokopedia/{channel}', [MarketplaceWebhookController::class, 'tokopedia']);
 });
 
 // ---------- Merchant (butuh login + rate limit longgar) ----------
@@ -90,6 +95,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
         // Fase 6: putuskan refund
         Route::get('refunds', [RefundController::class, 'adminIndex']);
         Route::put('refunds/{refund}', [RefundController::class, 'process']);
+
+        // Fase 7: status payment gateway (KYC Midtrans produksi)
+        Route::get('payment-gateway', [AdminController::class, 'paymentGateway']);
+        Route::put('payment-gateway', [AdminController::class, 'updatePaymentGateway']);
     });
 
     // Fase 5: saldo seller + withdraw (merchant login)

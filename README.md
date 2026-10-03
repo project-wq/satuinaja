@@ -438,7 +438,7 @@ npm run preview                                 # preview hasil build
 cd backend && php artisan test
 ```
 
-Mencakup 49 test (170 assertions): registrasi & login, pembatasan percobaan login, isolasi data antar-seller, CRUD produk, checkout (stok & total), lacak pesanan, verifikasi signature webhook, **batas plan (produk/channel/publish), alur langganan Midtrans (settlement webhook), hak akses admin panel, fee marketplace + saldo/withdraw, laporan penjualan + export CSV, notifikasi in-app, dan refund (clawback saldo, otorisasi admin)**.
+Mencakup 59 test (202 assertions): registrasi & login, pembatasan percobaan login, isolasi data antar-seller, CRUD produk, checkout (stok & total), lacak pesanan, verifikasi signature webhook, **batas plan (produk/channel/publish), alur langganan Midtrans (settlement webhook), hak akses admin panel, fee marketplace + saldo/withdraw, laporan penjualan + export CSV, notifikasi in-app, refund (clawback saldo, otorisasi admin), kesiapan payment gateway (KYC + toggle mode), sinkronisasi stok dua arah (pull Shopee), dan webhook order marketplace (HMAC + idempotent)**.
 
 CI di GitHub Actions (`.github/workflows/ci.yml`) menjalankan test backend **dan** build frontend setiap kali ada push ke `main`/`develop`. Cek hasilnya di tab **Actions** repo.
 
@@ -558,7 +558,7 @@ crontab -e
 - [x] **Fase 4** — langganan seller (billing plan), panel admin, webhook Midtrans settlement
 - [x] **Fase 5** — fee marketplace (buyer/seller/admin), saldo seller + withdraw, publisher (Facebook/IG/TikTok/Shopee/Tokopedia), diskon produk
 - [x] **Fase 6** — laporan penjualan (ringkasan/harian/produk terlaris + export CSV), notifikasi in-app, refund dengan clawback saldo
-- [ ] **Fase 7** — payment produksi (KYC Midtrans), sinkronisasi stok dua arah, webhook tokopedia/shopee real
+- [x] **Fase 7** — kesiapan payment produksi (KYC Midtrans + toggle sandbox/production), sinkronisasi stok dua arah (push + pull Shopee), webhook order marketplace (Shopee/Tokopedia, HMAC + idempotent)
 
 ---
 
