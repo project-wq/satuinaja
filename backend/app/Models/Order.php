@@ -10,7 +10,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'merchant_id', 'order_no', 'buyer_name', 'buyer_phone', 'buyer_email',
+    'merchant_id', 'channel_id', 'source', 'external_order_id', 'order_no',
+    'buyer_name', 'buyer_phone', 'buyer_email',
     'shipping_address', 'destination_city_id', 'courier', 'service',
     'shipping_cost', 'subtotal', 'discount_total', 'subtotal_sale',
     'buyer_fee', 'buyer_admin_fee', 'seller_net', 'total', 'tracking_no',
@@ -45,6 +46,11 @@ class Order extends Model
     public function merchant(): BelongsTo
     {
         return $this->belongsTo(Merchant::class);
+    }
+
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(Channel::class);
     }
 
     public function items(): HasMany

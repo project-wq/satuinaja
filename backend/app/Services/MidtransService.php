@@ -162,4 +162,49 @@ class MidtransService
     {
         return 'ORD-'.now()->format('ymd').'-'.Str::upper(Str::random(6));
     }
+
+    /**
+     * Status kesiapan produksi (Fase 7).
+     * Kembalikan: mode, kredensial lengkap?, + hasil ping live ke Midtrans.
+     */
+    public function readiness(): array
+    {
+        $serverKey = (string) config('services.midtrans.server_key');
+        $clientKey = (string) config('services.midtrans.client_key');
+        $sandbox = (bool) config('services.midtrans.sandbox', true);
+
+        $configured = $serverKey !== '' && $clientKey !== '';
+
+        // Cek live: GET /v2/channels (dokumented, basic auth server_key).
+        // Kunci salah → 401; kunci benar → 200 daftar payment channel aktif.
+        $reachable = null;
+        $note = null;
+        if ($serverKey !== '') {
+            $base = $sandbox
+                ? 'https://api.sandbox.midtrans.com'
+                : 'https://api.midtrans.com';
+            try {
+                $res = Http::withBasicAuth($serverKey, '')
+                    ->timeout(15)
+                    ->acceptJson()
+                    ->get("{$base}/v2/channels");
+                $reachable = $res->status() !== 401;
+                $note = $reachable
+                    ? 'Kredensial Midtrans valid.'
+                    : 'Kredensial ditolak Midtrans (HTTP 401).';
+            } catch (\Throwable $e) {
+                $reachable = false;
+                $note = 'Tidak bisa menghubungi Midtrans: '.$e->getMessage();
+            }
+        }
+
+        return [
+            'mode' => $sandbox ? 'sandbox' : 'production',
+            'enabled' => $serverKey !== '',
+            'configured' => $configured,
+            'has_client_key' => $clientKey !== '',
+            'reachable' => $reachable,
+            'note' => $note ?? 'MIDTRANS_SERVER_KEY belum diset.',
+        ];
+    }
 }
