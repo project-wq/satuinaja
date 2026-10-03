@@ -59,6 +59,8 @@ export const useAuth = create<AuthState>()(
 
 interface CartItem {
   productId: number
+  variantId?: number
+  variantName?: string
   slug: string
   title: string
   price: number
@@ -70,11 +72,15 @@ interface CartItem {
 interface CartState {
   items: CartItem[]
   add: (item: CartItem) => void
-  setQty: (productId: number, qty: number) => void
-  remove: (productId: number) => void
+  setQty: (productId: number, qty: number, variantId?: number) => void
+  remove: (productId: number, variantId?: number) => void
   clear: () => void
   subtotal: () => number
 }
+
+/** Kunci baris keranjang: produk + varian (varian berbeda = baris berbeda). */
+const rowKey = (i: { productId: number; variantId?: number }) =>
+  `${i.productId}:${i.variantId ?? 0}`
 
 export const useCart = create<CartState>()(
   persist(
@@ -82,23 +88,33 @@ export const useCart = create<CartState>()(
       items: [],
       add: (item) =>
         set((s) => {
-          const found = s.items.find((i) => i.productId === item.productId)
+          const key = rowKey(item)
+          const found = s.items.find((i) => rowKey(i) === key)
           if (found) {
             return {
               items: s.items.map((i) =>
-                i.productId === item.productId ? { ...i, qty: i.qty + item.qty } : i,
+                rowKey(i) === key ? { ...i, qty: i.qty + item.qty } : i,
               ),
             }
           }
           return { items: [...s.items, item] }
         }),
-      setQty: (productId, qty) =>
+      setQty: (productId, qty, variantId) =>
         set((s) => ({
           items: qty <= 0
-            ? s.items.filter((i) => i.productId !== productId)
-            : s.items.map((i) => (i.productId === productId ? { ...i, qty } : i)),
+            ? s.items.filter((i) => !(i.productId === productId && (i.variantId ?? 0) === (variantId ?? 0)))
+            : s.items.map((i) =>
+                i.productId === productId && (i.variantId ?? 0) === (variantId ?? 0)
+                  ? { ...i, qty }
+                  : i,
+              ),
         })),
-      remove: (productId) => set((s) => ({ items: s.items.filter((i) => i.productId !== productId) })),
+      remove: (productId, variantId) =>
+        set((s) => ({
+          items: s.items.filter(
+            (i) => !(i.productId === productId && (i.variantId ?? 0) === (variantId ?? 0)),
+          ),
+        })),
       clear: () => set({ items: [] }),
       subtotal: () => get().items.reduce((acc, i) => acc + i.price * i.qty, 0),
     }),

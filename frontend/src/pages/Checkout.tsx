@@ -50,7 +50,7 @@ export default function Checkout() {
     api
       .post<{ data: FeePreview }>('/checkout/preview', {
         merchant_slug: shopSlug,
-        items: items.map((i) => ({ product_id: i.productId, qty: i.qty })),
+        items: items.map((i) => ({ product_id: i.productId, variant_id: i.variantId, qty: i.qty })),
         shipping_cost: selected?.cost ?? 0,
       })
       .then((r) => {

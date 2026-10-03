@@ -18,6 +18,7 @@ export default function ProductDetail() {
   const add = useCart((s) => s.add)
   const [qty, setQty] = useState(1)
   const [imgIdx, setImgIdx] = useState(0)
+  const [variantId, setVariantId] = useState<number | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['product', shopSlug, productSlug],
@@ -29,6 +30,11 @@ export default function ProductDetail() {
 
   const { merchant, product } = data!.data
   const images = (product.images ?? []).map((i) => imageUrl(i)!).filter(Boolean)
+  const variants = product.variants ?? []
+  const needsVariant = variants.length > 0
+  const selected = variants.find((v) => v.id === variantId) ?? null
+  const unitPrice = (selected?.price ?? product.discount_price ?? product.price)
+  const stockLeft = selected ? selected.stock : product.stock
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -71,10 +77,44 @@ export default function ProductDetail() {
           <div>
             <h1 className="text-2xl font-bold">{product.title}</h1>
             <p className="mt-3 text-slate-400 text-sm line-through">{rupiah(product.price)}</p>
-            <p className="text-3xl font-bold mt-1">{rupiah(product.discount_price ?? product.price)}</p>
+            <p className="text-3xl font-bold mt-1">{rupiah(unitPrice)}</p>
             <p className="text-sm text-slate-500 mt-2">
-              Berat {product.weight} g · {product.stock > 0 ? `Stok ${product.stock}` : 'Stok habis'}
+              Berat {product.weight} g ·{' '}
+              {selected
+                ? stockLeft > 0
+                  ? `Stok ${selected.name}: ${stockLeft}`
+                  : `Stok ${selected.name} habis`
+                : stockLeft > 0
+                  ? `Stok ${stockLeft}`
+                  : 'Stok habis'}
             </p>
+
+            {needsVariant && (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-slate-600 mb-2">Pilih varian:</p>
+                <div className="flex flex-wrap gap-2">
+                  {variants.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => setVariantId(v.id)}
+                      disabled={v.stock === 0}
+                      className={`px-3 py-1.5 rounded-lg border text-sm ${
+                        variantId === v.id
+                          ? 'border-slate-900 bg-slate-900 text-white'
+                          : 'border-slate-300 text-slate-700'
+                      } ${v.stock === 0 ? 'opacity-40 line-through' : ''}`}
+                    >
+                      {v.name}
+                      {v.price !== null && (
+                        <span className={variantId === v.id ? ' text-slate-300' : ' text-slate-400'}>
+                          {' '}· {rupiah(v.price)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {product.description && (
               <p className="mt-5 text-slate-700 whitespace-pre-wrap leading-relaxed">{product.description}</p>
@@ -90,7 +130,7 @@ export default function ProductDetail() {
                 </button>
                 <span className="px-4 tabular-nums">{qty}</span>
                 <button
-                  onClick={() => setQty((q) => Math.min(product.stock, q + 1))}
+                  onClick={() => setQty((q) => Math.min(stockLeft, q + 1))}
                   className="px-3 py-2 text-lg leading-none"
                 >
                   +
@@ -98,13 +138,16 @@ export default function ProductDetail() {
               </div>
 
               <button
-                disabled={product.stock === 0}
+                disabled={stockLeft === 0 || (needsVariant && !selected)}
                 onClick={() => {
+                  if (needsVariant && !selected) return
                   add({
                     productId: product.id,
+                    variantId: selected?.id,
+                    variantName: selected?.name,
                     slug: product.slug,
                     title: product.title,
-                    price: product.discount_price ?? product.price,
+                    price: unitPrice,
                     weight: product.weight,
                     image: images[0],
                     qty,
@@ -113,7 +156,11 @@ export default function ProductDetail() {
                 }}
                 className="flex-1 rounded-lg bg-slate-900 text-white py-3 font-medium disabled:opacity-40"
               >
-                {product.stock === 0 ? 'Stok habis' : 'Tambah ke Keranjang'}
+                {needsVariant && !selected
+                  ? 'Pilih varian dulu'
+                  : stockLeft === 0
+                    ? 'Stok habis'
+                    : 'Tambah ke Keranjang'}
               </button>
             </div>
           </div>

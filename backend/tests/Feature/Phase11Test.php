@@ -101,7 +101,7 @@ class Phase11Test extends TestCase
 
         $this->actingAs($intruder)
             ->putJson("/api/v1/products/{$p->id}/variants", ['variants' => []])
-            ->assertForbidden();
+            ->assertNotFound(); // global scope merchant: produk tak terlihat
     }
 
     // ---------- Checkout dengan varian ----------
@@ -193,7 +193,7 @@ class Phase11Test extends TestCase
         $r->assertOk();
         $data = $r->json('data');
         $this->assertSame(70000, $data['subtotal']);
-        $this->assertStringContainsString('— XL', $data['lines'][0]['title']);
+        $this->assertStringContainsString('— XL', $data['items'][0]['title']);
     }
 
     // ---------- Storefront ----------

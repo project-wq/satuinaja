@@ -82,6 +82,16 @@ export interface User {
   merchant: Merchant | null
 }
 
+export interface ProductVariant {
+  id: number
+  product_id: number
+  name: string
+  sku: string | null
+  price: number | null
+  stock: number
+  position: number
+}
+
 export interface Product {
   id: number
   merchant_id: number
@@ -94,6 +104,7 @@ export interface Product {
   weight: number
   images: string[] | null
   status: 'draft' | 'active' | 'archived'
+  variants?: ProductVariant[]
   created_at: string
 }
 
