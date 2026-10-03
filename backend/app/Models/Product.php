@@ -48,6 +48,11 @@ class Product extends Model
         return $this->hasMany(PublishLog::class);
     }
 
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class)->orderBy('position');
+    }
+
     public function scopePublic(Builder $builder): Builder
     {
         return $builder->where('status', 'active');

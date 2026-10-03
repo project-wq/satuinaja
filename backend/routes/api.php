@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\RefundController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ShippingController;
 use App\Http\Controllers\Api\V1\StorefrontController;
+use App\Http\Controllers\Api\V1\VariantController;
 use App\Http\Controllers\Api\V1\WebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -64,6 +65,9 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
 
     Route::apiResource('products', ProductController::class);
     Route::post('products/{product}/publish', [ProductController::class, 'publish']);
+    Route::put('products/{product}/variants', [VariantController::class, 'sync']);
+    Route::put('products/{product}/variants/{variant}', [VariantController::class, 'update']);
+    Route::delete('products/{product}/variants/{variant}', [VariantController::class, 'destroy']);
 
     Route::get('channels', [ChannelController::class, 'index']);
     Route::post('channels', [ChannelController::class, 'store']);
