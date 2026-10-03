@@ -232,6 +232,60 @@ class Phase7Test extends TestCase
         ], 'rahasia-partner')->assertStatus(422);
     }
 
+    // ---------- 7.4 upload gambar ke Shopee ----------
+
+    public function test_shopee_publish_uploads_product_images(): void
+    {
+        Http::fake([
+            '*/api/v2/media_space/upload_image*' => Http::response([
+                'response' => ['image_info' => ['image_id' => 'IMG-1']],
+            ], 200),
+            '*/api/v2/product/add_item*' => Http::response([
+                'response' => ['item_id' => 999],
+            ], 200),
+        ]);
+
+        $m = $this->merchant();
+        $p = Product::create([
+            'merchant_id' => $m->id,
+            'title' => 'Baju',
+            'slug' => 'baju-'.uniqid(),
+            'price' => 25000,
+            'stock' => 5,
+            'weight' => 300,
+            'status' => 'active',
+            'images' => ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'],
+        ]);
+        $c = $this->shopeeChannel($m);
+
+        $r = app(\App\Services\ShopeeService::class)->publish($p, $c);
+
+        $this->assertTrue($r['ok']);
+        $this->assertSame('999', $r['external_id']);
+
+        // add_item menerima image_id_list berisi 2 gambar.
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/api/v2/product/add_item')
+            && data_get($req->data(), 'image.image_id_list') === ['IMG-1', 'IMG-1']);
+    }
+
+    public function test_shopee_publish_succeeds_without_images(): void
+    {
+        Http::fake([
+            '*/api/v2/product/add_item*' => Http::response([
+                'response' => ['item_id' => 101],
+            ], 200),
+        ]);
+
+        $m = $this->merchant();
+        $p = $this->product($m);
+        $c = $this->shopeeChannel($m);
+
+        $r = app(\App\Services\ShopeeService::class)->publish($p, $c);
+
+        $this->assertTrue($r['ok']);
+        Http::assertNotSent(fn ($req) => str_contains($req->url(), '/api/v2/media_space/upload_image'));
+    }
+
     // ---------- 7.1b readiness tanpa kredensial ----------
 
     public function test_readiness_reports_disabled_without_key(): void

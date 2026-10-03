@@ -22,13 +22,18 @@ export default function Dashboard() {
     queryFn: () => api.get<{ data: Channel[] }>('/channels'),
   })
 
+  const report = useQuery({
+    queryKey: ['reports-sales-7d'],
+    queryFn: () => api.get<{ data: { daily: { d: string; revenue: number; orders: number }[]; summary: { revenue: number } } }>('/reports/sales?period=7d'),
+  })
+
   const totalProducts = products.data?.total ?? 0
   const activeChannels = channels.data?.data.filter((c) => c.active).length ?? 0
   const paidOrders = orders.data?.data.filter((o) => o.payment_status === 'paid').length ?? 0
-  const revenue =
-    orders.data?.data
+  const revenue = report.data?.data.summary.revenue ??
+    (orders.data?.data
       .filter((o) => o.payment_status === 'paid')
-      .reduce((a, o) => a + o.total, 0) ?? 0
+      .reduce((a, o) => a + o.total, 0) ?? 0)
 
   const cards = [
     { label: 'Produk', value: totalProducts, hint: `${products.data?.data.filter((p) => p.status === 'active').length ?? 0} aktif` },
@@ -64,22 +69,27 @@ export default function Dashboard() {
       <div className="grid lg:grid-cols-2 gap-4">
         <section className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Produk Terbaru</h2>
-            <Link to="/seller/products" className="text-sm underline text-slate-500">
-              Kelola
+            <h2 className="font-semibold">Penjualan 7 Hari Terakhir</h2>
+            <Link to="/seller/balance" className="text-sm underline text-slate-500">
+              Detail
             </Link>
           </div>
-          <ul className="mt-3 divide-y divide-slate-100">
-            {products.data?.data.slice(0, 5).map((p) => (
-              <li key={p.id} className="py-2 flex items-center justify-between text-sm">
-                <span className="truncate pr-3">{p.title}</span>
-                <span className="text-slate-500 shrink-0">
-                  {rupiah(p.price)} · stok {p.stock}
-                </span>
-              </li>
-            ))}
-            {totalProducts === 0 && <li className="py-2 text-sm text-slate-400">Belum ada produk.</li>}
-          </ul>
+          <div className="mt-4 flex items-end gap-1.5 h-32">
+            {(report.data?.data.daily ?? []).map((d) => {
+              const max = Math.max(...(report.data?.data.daily ?? []).map((x) => x.revenue), 1)
+              const h = d.revenue > 0 ? Math.max(6, Math.round((d.revenue / max) * 100)) : 2
+              return (
+                <div key={d.d} className="flex-1 flex flex-col items-center gap-1" title={`${d.d}: ${rupiah(d.revenue)}`}>
+                  <div
+                    className="w-full rounded-t-md bg-slate-900"
+                    style={{ height: `${h}%` }}
+                  />
+                  <span className="text-[10px] text-slate-400">{d.d.slice(8)}</span>
+                </div>
+              )
+            })}
+            {!report.data && <p className="text-sm text-slate-400">Memuat…</p>}
+          </div>
         </section>
 
         <section className="bg-white rounded-xl border border-slate-200 p-5">
