@@ -14,7 +14,7 @@ class Notification extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['merchant_id', 'type', 'title', 'body', 'link'];
+    protected $fillable = ['merchant_id', 'type', 'title', 'body', 'link', 'read_at'];
 
     protected $casts = ['read_at' => 'datetime'];
 
