@@ -59,7 +59,7 @@ class Phase10Test extends TestCase
         $entry = $fresh->product_hashes[$p->id];
         $this->assertIsArray($entry);
         $this->assertNotEmpty($entry['hash']);
-        $this->assertArrayHasKey('updated_at', $entry);
+        $this->assertArrayHasKey('synced_at', $entry);
 
         // Tidak ada perubahan → run kedua tidak push lagi.
         $this->artisan('satu:sync-stock')->assertExitCode(0);
