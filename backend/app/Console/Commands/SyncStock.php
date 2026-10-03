@@ -6,13 +6,15 @@ use App\Models\Channel;
 use App\Models\Merchant;
 use App\Services\StockSyncService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 
 /**
  * Jalankan lewat scheduler (setiap 5 menit): deteksi perubahan produk
- * (stok/harga/deskripsi) lalu sinkronkan ke channel yang aktif.
+ * (stok/harga/deskripsi/gambar) lalu sinkronkan ke channel yang aktif.
  *
  * Hash disimpan di channels.product_hashes sebagai JSON:
- *   { "<product_id>": "<md5 judul|harga|stok|deskripsi>" }
+ *   { "<product_id>": {"hash": "<md5>", "updated_at": "ISO", "flap_at": "ISO|null"} }
+ * Versi lama string md5 dibaca kompatibel (tidak punya updated_at/flap_at).
  */
 class SyncStock extends Command
 {
@@ -29,19 +31,33 @@ class SyncStock extends Command
         $channels = Channel::where('active', true)->get();
 
         foreach ($channels as $channel) {
-            $products = $channel->merchant()->first()
-                ? $channel->merchant()->first()->products()->where('status', 'active')->get()
-                : collect();
+            $merchant = $channel->merchant()->first();
+            if (! $merchant) {
+                continue;
+            }
 
+            $products = $merchant->products()->where('status', 'active')->get();
             $hashes = (array) $channel->product_hashes;
 
             foreach ($products as $product) {
-                $hash = md5(implode('|', [
-                    $product->title, $product->price, $product->stock, $product->description,
-                ]));
+                $prev = is_array($hashes[$product->id] ?? null)
+                    ? $hashes[$product->id]
+                    : (isset($hashes[$product->id]) ? ['hash' => (string) $hashes[$product->id]] : null);
+                $hash = $this->hashOf($product, $channel->platform);
 
-                if (($hashes[$product->id] ?? null) === $hash) {
+                if ($prev && ($prev['hash'] ?? null) === $hash) {
                     continue; // tak ada perubahan
+                }
+
+                // Anti-flap: kalau sudah republish dalam 10 menit terakhir
+                // dan hash masih berubah, tahan (produk sedang diedit).
+                $flapAt = isset($prev['flap_at']) ? Carbon::parse($prev['flap_at']) : null;
+                if ($flapAt && $flapAt->gt(now()->subMinutes(10))) {
+                    $this->line(sprintf(
+                        '[%s] %s DITAHAN (kemungkinan sedang diedit; coba lagi nanti)',
+                        $channel->platform, $product->title,
+                    ));
+                    continue;
                 }
 
                 $result = $sync->sync($product)[$channel->platform] ?? ['ok' => false];
@@ -55,13 +71,31 @@ class SyncStock extends Command
                 ));
 
                 if ($result['ok'] ?? false) {
-                    $hashes[$product->id] = $hash;
+                    $hashes[$product->id] = [
+                        'hash' => $hash,
+                        'updated_at' => now()->toISOString(),
+                        'flap_at' => $flapAt ? now()->toISOString() : null,
+                    ];
                     $channel->update(['product_hashes' => $hashes]);
+                } elseif (! $result['skipped'] ?? false) {
+                    // Gagal → jangan menandai flap, tapi catat waktu coba
+                    // terakhir agar log tidak spam.
+                    $this->line(sprintf('  └ retry berikutnya dalam 5 menit'));
                 }
             }
         }
 
         return self::SUCCESS;
+    }
+
+    /** md5 dari field yang menentukan konten produk di channel. */
+    private function hashOf($product, string $platform): string
+    {
+        $images = is_array($product->images) ? implode('|', $product->images) : '';
+        return md5(implode('|', [
+            $product->title, $product->price, $product->stock,
+            $product->description, $images, $product->weight,
+        ]));
     }
 
     /**

@@ -10,15 +10,14 @@ use Illuminate\Support\Facades\Log;
 /**
  * Sinkronkan perubahan produk ke channel yang sudah aktif:
  *   - stok berkurang (checkout)   -> update stok di Facebook Page/Shopee
- *   - judul/harga/deskripsi berubah -> update produk di channel
+ *   - judul/harga/deskripsi berubah -> update produk di channel (Fase 10:
+ *     deteksi perubahan via hash + anti-flap, republish kalau platform
+ *     tidak punya endpoint update (IG/TikTok/FB tanpa catalog)).
  *
- * Facebook: POST /{page-id}/products  (Catalog Manager) — membutuhkan
- *   katalog produk Meta yang terhubung (commerce_products scope).
- * Shopee  : POST /api/v2/product/update_item
- *
- * Kalau channel tidak mendukung update (mis. IG/TikTok), dilewati dengan
- * catatan. Tidak ada "sukses palsu": kalau platform butuh setup tambahan,
- * sistem melaporkan pesan yang jelas.
+ * Hash disimpan di channels.product_hashes sebagai JSON:
+ *   { "<product_id>": {"hash": "...", "updated_at": ..., "flap_at": ...} }
+ * (awal: string md5; dibaca kompatibel dengan cast array — lihat
+ *  SyncStock::changed()).
  */
 class StockSyncService
 {
