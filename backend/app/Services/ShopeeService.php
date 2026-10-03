@@ -137,6 +137,72 @@ class ShopeeService
         return hash_hmac('sha256', $baseString, (string) $creds['partner_key']);
     }
 
+    /**
+     * Two-way sync (Fase 7): tarik stok asli dari Shopee untuk 1 item.
+     * Shopee: POST /api/v2/product/get_item_base_info → response.stock_info_v2
+     * (atau response.stock_info.stock untuk item single-stock).
+     */
+    public function pullStock(Channel $channel, string $externalId): array
+    {
+        $creds = (array) $channel->credentials;
+        $missing = $this->missing($creds);
+        if ($missing) {
+            return ['ok' => false, 'error' => "Kredensial Shopee kurang: {$missing}."];
+        }
+
+        try {
+            $path = '/api/v2/product/get_item_base_info';
+            $timestamp = time();
+            $sign = $this->sign($creds, $path, $timestamp);
+
+            $res = Http::withHeaders([
+                'Authorization' => $sign,
+                'Content-Type' => 'application/json',
+            ])->timeout(30)->post($this->baseUrl($creds).$path.'?'.http_build_query([
+                'partner_id' => (int) $creds['partner_id'],
+                'timestamp' => $timestamp,
+                'access_token' => $creds['access_token'],
+                'shop_id' => (int) $creds['shop_id'],
+            ]), [
+                'item_id_list' => [(int) $externalId],
+            ]);
+
+            if (! $res->successful()) {
+                return ['ok' => false, 'error' => $this->errorOf($res->json(), $res->status())];
+            }
+
+            $item = data_get($res->json(), 'response.item_list.0');
+            if (! $item) {
+                return ['ok' => false, 'error' => $this->errorOf($res->json(), 200)];
+            }
+
+            // Item multi-varian: stok ada di stock_info_v2.seller_stock[]; item tunggal: stock_info.stock.
+            $stock = null;
+            $v2 = data_get($item, 'stock_info_v2.seller_stock');
+            if (is_array($v2) && $v2 !== []) {
+                $stock = array_sum(array_map(fn ($s) => (int) ($s['stock'] ?? 0), $v2));
+            } elseif (data_get($item, 'stock_info_v2.seller_stock.0.stock') !== null) {
+                $stock = (int) data_get($item, 'stock_info_v2.seller_stock.0.stock');
+            } elseif (data_get($item, 'stock_info.stock') !== null) {
+                $stock = (int) data_get($item, 'stock_info.stock');
+            }
+
+            if ($stock === null) {
+                return ['ok' => false, 'error' => 'Shopee tidak mengembalikan stok untuk item tsb.'];
+            }
+
+            return [
+                'ok' => true,
+                'stock' => max(0, $stock),
+                'status' => data_get($item, 'item_status'),
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('shopee.pull_stock.failed', ['error' => $e->getMessage()]);
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
     private function baseUrl(array $creds): string
     {
         $sandbox = in_array((string) ($creds['sandbox'] ?? ''), ['1', 'true', 'yes'], true);

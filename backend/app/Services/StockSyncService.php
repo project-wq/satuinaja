@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Channel;
 use App\Models\Product;
+use App\Models\PublishLog;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -21,6 +22,11 @@ use Illuminate\Support\Facades\Log;
  */
 class StockSyncService
 {
+    public function __construct(
+        private ShopeeService $shopee,
+    ) {
+    }
+
     public function sync(Product $product): array
     {
         $channels = Channel::where('merchant_id', $product->merchant_id)
