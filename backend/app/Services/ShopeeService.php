@@ -86,11 +86,14 @@ class ShopeeService
                 return ['ok' => false, 'error' => $this->errorOf($res->json(), $res->status() ?: 200)];
             }
 
+            // Fase 12: produk bervarian -> inisialisasi tier Shopee + petakan model_id.
+            $variantInfo = $this->pushVariants($product, $channel, (int) $itemId);
+
             return [
                 'ok' => true,
                 'external_id' => (string) $itemId,
                 'external_url' => "https://shopee.co.id/product/{$creds['shop_id']}/{$itemId}",
-            ];
+            ] + ($variantInfo ? ['variant' => $variantInfo] : []);
         } catch (\Throwable $e) {
             Log::warning('shopee.publish.failed', ['error' => $e->getMessage()]);
 
