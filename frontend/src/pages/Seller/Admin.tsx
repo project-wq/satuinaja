@@ -42,15 +42,25 @@ interface FeeSettings {
   seller_fee_per_item: number
 }
 
+interface GatewayStatus {
+  mode: 'sandbox' | 'production'
+  enabled: boolean
+  configured: boolean
+  has_client_key: boolean
+  reachable: boolean | null
+  note: string
+}
+
 const fmt = (n: number) => 'Rp' + n.toLocaleString('id-ID')
 
 export default function Admin() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<'merchants' | 'withdrawals' | 'settings'>('merchants')
+  const [tab, setTab] = useState<'merchants' | 'withdrawals' | 'settings' | 'payment'>('merchants')
   const [stats, setStats] = useState<Stats | null>(null)
   const [rows, setRows] = useState<MerchantRow[]>([])
   const [wds, setWds] = useState<WithdrawRow[]>([])
   const [settings, setSettings] = useState<FeeSettings | null>(null)
+  const [gateway, setGateway] = useState<GatewayStatus | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
 
@@ -116,11 +126,34 @@ export default function Admin() {
     }
   }
 
+  const loadGateway = async () => {
+    try {
+      const r = await api.get<{ data: GatewayStatus }>('/admin/payment-gateway')
+      setGateway(r.data)
+    } catch (e) {
+      setErr((e as ApiError).message)
+    }
+  }
+
+  const setGatewayMode = async (sandbox: boolean) => {
+    setBusy(-2)
+    setErr('')
+    try {
+      const r = await api.put<{ data: GatewayStatus }>('/admin/payment-gateway', { sandbox })
+      setGateway(r.data)
+    } catch (e) {
+      setErr((e as ApiError).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const switchTab = (t: typeof tab) => {
     setTab(t)
     setErr('')
     if (t === 'withdrawals') loadWithdrawals()
     if (t === 'settings') loadSettings()
+    if (t === 'payment') loadGateway()
   }
 
   const processWithdrawal = async (w: WithdrawRow, decision: 'approved' | 'rejected') => {
@@ -167,6 +200,7 @@ export default function Admin() {
               ['merchants', 'Merchant'],
               ['withdrawals', 'Penarikan'],
               ['settings', 'Pengaturan'],
+              ['payment', 'Pembayaran'],
             ] as const
           ).map(([key, label]) => (
             <button

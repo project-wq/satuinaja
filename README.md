@@ -404,6 +404,24 @@ Daftar di <https://binderbyte.com> → ambil API key → isi `BINDERBYTE_API_KEY
 3. **Settings → Configuration → Payment Notification URL**:
    `https://api.domainanda.com/api/v1/webhooks/midtrans`
 4. Selama uji, `MIDTRANS_SANDBOX=true`. Produksi butuh verifikasi dokumen usaha (KYC).
+5. Cek kesiapan dari panel admin: `GET /api/v1/admin/payment-gateway` (live ping ke Midtrans). Ganti mode sandbox↔production lewat `PUT /api/v1/admin/payment-gateway` `{ "sandbox": false }` (overlay `Setting`, tak perlu ubah `.env`).
+
+### Webhook order marketplace (Shopee/Tokopedia)
+
+Order yang masuk dari marketplace dikirim ke:
+- Shopee: `POST /api/v1/webhooks/shopee/{channel_id}`
+- Tokopedia: `POST /api/v1/webhooks/tokopedia/{channel_id}`
+
+Signature = `HMAC-SHA256(raw_body, secret)` hex, dikirim di header `X-Marketplace-Signature`
+(secret = `partner_key` Shopee / `client_secret` Tokopedia dari kredensial channel).
+Idempotent per `(channel_id, external_order_id)`; order langsung `paid` + saldo seller diisi.
+
+### Sinkronisasi stok dua arah
+
+```bash
+php artisan satu:sync-stock         # push lokal → channel (setiap 5 menit)
+php artisan satu:sync-stock --pull  # tarik stok marketplace → lokal (setiap 15 menit)
+```
 
 ---
 
