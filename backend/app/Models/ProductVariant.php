@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['product_id', 'name', 'sku', 'price', 'stock', 'position'])]
+#[Fillable(['product_id', 'name', 'sku', 'price', 'stock', 'position', 'shopee_model_id'])]
 class ProductVariant extends Model
 {
     protected $casts = [
