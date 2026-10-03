@@ -113,7 +113,9 @@ class StockSyncService
                 'access_token' => $creds['access_token'],
                 'shop_id' => (int) $creds['shop_id'],
             ]), [
-                'item_id' => (int) data_get($channel->product_hashes, $product->id.'.external_id', 0),
+                // item_id asli dari log publish sukses (bukan product_hashes —
+                // kolom itu menyimpan md5 perubahan, BUKAN external_id).
+                'item_id' => $this->externalIdOf($product, $channel),
                 'stock' => (int) $product->stock,
             ]);
 
@@ -127,6 +129,15 @@ class StockSyncService
 
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /** external_id item marketplace dari log publish sukses; 0 bila belum pernah publish. */
+    private function externalIdOf(Product $product, Channel $channel): int
+    {
+        return (int) (PublishLog::where('product_id', $product->id)
+            ->where('channel_id', $channel->id)
+            ->where('status', 'success')
+            ->value('external_id') ?? 0);
     }
 
     /**

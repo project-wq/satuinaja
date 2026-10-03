@@ -456,7 +456,7 @@ npm run preview                                 # preview hasil build
 cd backend && php artisan test
 ```
 
-Mencakup 61 test (207 assertions): registrasi & login, pembatasan percobaan login, isolasi data antar-seller, CRUD produk, checkout (stok & total), lacak pesanan, verifikasi signature webhook, **batas plan (produk/channel/publish), alur langganan Midtrans (settlement webhook), hak akses admin panel, fee marketplace + saldo/withdraw, laporan penjualan + export CSV, notifikasi in-app, refund (clawback saldo, otorisasi admin), kesiapan payment gateway (KYC + toggle mode), sinkronisasi stok dua arah (pull Shopee), dan webhook order marketplace (HMAC + idempotent)**.
+Mencakup 64 test (212 assertions): registrasi & login, pembatasan percobaan login, isolasi data antar-seller, CRUD produk, checkout (stok & total), lacak pesanan, verifikasi signature webhook, **batas plan (produk/channel/publish), alur langganan Midtrans (settlement webhook), hak akses admin panel, fee marketplace + saldo/withdraw, laporan penjualan + export CSV, notifikasi in-app, refund (clawback saldo, otorisasi admin), kesiapan payment gateway (KYC + toggle mode), sinkronisasi stok dua arah (pull Shopee), dan webhook order marketplace (HMAC + idempotent)**.
 
 CI di GitHub Actions (`.github/workflows/ci.yml`) menjalankan test backend **dan** build frontend setiap kali ada push ke `main`/`develop`. Cek hasilnya di tab **Actions** repo.
 
@@ -578,6 +578,7 @@ crontab -e
 - [x] **Fase 6** — laporan penjualan (ringkasan/harian/produk terlaris + export CSV), notifikasi in-app, refund dengan clawback saldo
 - [x] **Fase 7** — kesiapan payment produksi (KYC Midtrans + toggle sandbox/production), sinkronisasi stok dua arah (push + pull Shopee), webhook order marketplace (Shopee/Tokopedia, HMAC + idempotent)
 - [x] **Fase 8** — upload gambar produk ke Shopee (media_space → image_id_list), dashboard penjualan 7 hari (chart CSS murni)
+- [x] **Fase 9** — fix sync stok: `item_id` update_item sekarang dari `PublishLog.external_id` (bukan `product_hashes` yang isinya md5), cast `product_hashes` array + fillable
 
 ---
 

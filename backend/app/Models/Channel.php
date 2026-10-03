@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'merchant_id', 'platform', 'label', 'credentials', 'active',
-    'last_sync_at', 'last_error',
+    'last_sync_at', 'last_error', 'product_hashes',
 ])]
 #[Hidden(['credentials'])]
 class Channel extends Model
@@ -27,6 +27,7 @@ class Channel extends Model
         'credentials' => 'encrypted:array',
         'active' => 'boolean',
         'last_sync_at' => 'datetime',
+        'product_hashes' => 'array',
     ];
 
     protected static function booted(): void
