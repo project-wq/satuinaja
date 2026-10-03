@@ -442,6 +442,52 @@ export default function Admin() {
           </button>
         </form>
       )}
+
+      {tab === 'payment' && gateway && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 max-w-lg space-y-4">
+          <h2 className="font-semibold">Payment Gateway (Midtrans)</h2>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg border border-slate-200 p-3">
+              <div className="text-xs text-slate-400">Mode</div>
+              <div className="font-semibold uppercase">{gateway.mode}</div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <div className="text-xs text-slate-400">Kredensial</div>
+              <div className={`font-semibold ${gateway.configured ? 'text-green-600' : 'text-amber-600'}`}>
+                {gateway.configured ? 'Lengkap' : 'Belum lengkap'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <div className="text-xs text-slate-400">Terhubung</div>
+              <div
+                className={`font-semibold ${
+                  gateway.reachable === null ? 'text-slate-400' : gateway.reachable ? 'text-green-600' : 'text-red-600'
+                }`}
+              >
+                {gateway.reachable === null ? '—' : gateway.reachable ? 'Ya' : 'Tidak'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <div className="text-xs text-slate-400">Client key</div>
+              <div className="font-semibold">{gateway.has_client_key ? 'Ada' : 'Tidak ada'}</div>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">{gateway.note}</p>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-600">Mode sandbox</span>
+            <button
+              onClick={() => setGatewayMode(gateway.mode === 'sandbox')}
+              disabled={busy === -2}
+              className="bg-slate-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
+            >
+              {busy === -2 ? 'Menyimpan…' : gateway.mode === 'sandbox' ? 'Beralih ke Production' : 'Beralih ke Sandbox'}
+            </button>
+          </div>
+          <p className="text-xs text-amber-600">
+            Mode production butuh KYC/live keys Midtrans. Uji dulu di sandbox sebelum beralih.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
