@@ -115,6 +115,26 @@ export default function Dashboard() {
           </ul>
         </section>
       </div>
+
+      <section className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Produk Terbaru</h2>
+          <Link to="/seller/products" className="text-sm underline text-slate-500">
+            Kelola
+          </Link>
+        </div>
+        <ul className="mt-3 divide-y divide-slate-100">
+          {products.data?.data.slice(0, 5).map((p) => (
+            <li key={p.id} className="py-2 flex items-center justify-between text-sm">
+              <span className="truncate pr-3">{p.title}</span>
+              <span className="text-slate-500 shrink-0">
+                {rupiah(p.price)} · stok {p.stock}
+              </span>
+            </li>
+          ))}
+          {totalProducts === 0 && <li className="py-2 text-sm text-slate-400">Belum ada produk.</li>}
+        </ul>
+      </section>
     </div>
   )
 }
