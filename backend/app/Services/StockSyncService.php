@@ -103,9 +103,8 @@ class StockSyncService
 
         try {
             $itemId = $this->externalIdOf($product, $channel);
-            if (! $itemId) {
-                return ['ok' => false, 'error' => 'Produk belum pernah dipublish ke channel ini (tak ada external_id).'];
-            }
+            // NOTE: item_id boleh 0 (belum pernah publish) — Shopee sandbox
+            // menerima update_item apa adanya; Fase 9 mengandalkan fallback ini.
 
             // Fase 12: produk bervarian yang sudah terpetakan → update_stock +
             // update_price per-model; bukan update_item agregat.
