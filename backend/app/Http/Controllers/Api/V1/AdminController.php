@@ -132,14 +132,6 @@ class AdminController extends Controller
     /** Baca konfigurasi fee (dipakai halaman pengaturan admin). */
     public function settings(): JsonResponse
     {
-        $this->ensureAdmin();
-
-        return response()->json(['data' => [
-            'fee_buyer_percent' => (int) Setting::get('fee_buyer_percent', '11'),
-            'admin_fee_per_item' => (int) Setting::get('admin_fee_per_item', '1000'),
-            'seller_fee_per_item' => (int) Setting::get('seller_fee_per_item', '500'),
-        ]]);
-    }
 
     /** Ubah konfigurasi fee. */
     public function updateSettings(Request $request): JsonResponse

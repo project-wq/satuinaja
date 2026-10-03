@@ -128,4 +128,52 @@ class StockSyncService
             return ['ok' => false, 'error' => $e->getMessage()];
         }
     }
+
+    /**
+     * Two-way sync (Fase 7): tarik stok asli dari marketplace → produk lokal.
+     * Sumber stok: PublishLog.status=success (punya external_id saat publish).
+     * Saat ini didukung Shopee (get_item_base_info).
+     *
+     * @return array<int, array>  hasil per produk
+     */
+    public function pull(Product $product): array
+    {
+        $channels = Channel::where('merchant_id', $product->merchant_id)
+            ->where('active', true)
+            ->get();
+
+        $results = [];
+
+        foreach ($channels as $channel) {
+            if ($channel->platform !== 'shopee') {
+                $results[$channel->platform] = [
+                    'ok' => false, 'skipped' => true,
+                    'error' => 'Platform ini belum mendukung tarik stok (pull).',
+                ];
+                continue;
+            }
+
+            // external_id dari log publish sukses (publish → channel).
+            $externalId = PublishLog::where('product_id', $product->id)
+                ->where('channel_id', $channel->id)
+                ->where('status', 'success')
+                ->value('external_id');
+
+            if (! $externalId) {
+                $results[$channel->platform] = [
+                    'ok' => false,
+                    'error' => 'Produk belum pernah dipublish ke channel ini (tak ada external_id).',
+                ];
+                continue;
+            }
+
+            $r = $this->shopee->pullStock($channel, (string) $externalId);
+            if ($r['ok']) {
+                $product->update(['stock' => (int) $r['stock']]);
+            }
+            $results[$channel->platform] = $r;
+        }
+
+        return $results;
+    }
 }

@@ -18,6 +18,19 @@ class MidtransService
     }
 
     /**
+     * Mode sandbox efektif: prioritas Setting admin (Fase 7), fallback env.
+     */
+    public function isSandbox(): bool
+    {
+        $setting = \App\Models\Setting::get('midtrans_sandbox', '');
+        if ($setting !== '') {
+            return in_array($setting, ['1', 'true', 'yes'], true);
+        }
+
+        return (bool) config('services.midtrans.sandbox', true);
+    }
+
+    /**
      * Buat transaksi Snap dari payload generik (dipakai langganan plan).
      * $payload: order_no, total, buyer_name, buyer_email, buyer_phone, items[].
      */
@@ -28,7 +41,7 @@ class MidtransService
             return ['ok' => false, 'error' => 'MIDTRANS_SERVER_KEY belum diset.'];
         }
 
-        $isSandbox = (bool) config('services.midtrans.sandbox', true);
+        $isSandbox = $this->isSandbox();
         $baseUrl = $isSandbox
             ? 'https://app.sandbox.midtrans.com/snap/v1'
             : 'https://app.midtrans.com/snap/v1';
@@ -85,7 +98,7 @@ class MidtransService
             return ['ok' => false, 'error' => 'MIDTRANS_SERVER_KEY belum diset.'];
         }
 
-        $isSandbox = (bool) config('services.midtrans.sandbox', true);
+        $isSandbox = $this->isSandbox();
         $baseUrl = $isSandbox
             ? 'https://app.sandbox.midtrans.com/snap/v1'
             : 'https://app.midtrans.com/snap/v1';
@@ -171,7 +184,7 @@ class MidtransService
     {
         $serverKey = (string) config('services.midtrans.server_key');
         $clientKey = (string) config('services.midtrans.client_key');
-        $sandbox = (bool) config('services.midtrans.sandbox', true);
+        $sandbox = $this->isSandbox();
 
         $configured = $serverKey !== '' && $clientKey !== '';
 

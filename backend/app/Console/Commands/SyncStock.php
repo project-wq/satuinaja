@@ -16,12 +16,16 @@ use Illuminate\Console\Command;
  */
 class SyncStock extends Command
 {
-    protected $signature = 'satu:sync-stock';
+    protected $signature = 'satu:sync-stock {--pull : Tarik stok dari marketplace ke lokal (two-way), bukan push lokal→channel}';
 
-    protected $description = 'Sinkronkan perubahan stok/harga produk ke channel aktif';
+    protected $description = 'Sinkronkan perubahan stok/harga produk ke channel aktif (atau tarik stok dari channel)';
 
     public function handle(StockSyncService $sync): int
     {
+        if ($this->option('pull')) {
+            return $this->pull($sync);
+        }
+
         $channels = Channel::where('active', true)->get();
 
         foreach ($channels as $channel) {
@@ -54,6 +58,38 @@ class SyncStock extends Command
                     $hashes[$product->id] = $hash;
                     $channel->update(['product_hashes' => $hashes]);
                 }
+            }
+        }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Tarik stok dari marketplace → lokal untuk semua produk aktif yang
+     * dipublish ke channel pendukung (Shopee). Dijalankan manual/terjadwal.
+     */
+    private function pull(StockSyncService $sync): int
+    {
+        $channels = Channel::where('active', true)
+            ->where('platform', 'shopee')
+            ->get();
+
+        foreach ($channels as $channel) {
+            $merchant = $channel->merchant()->first();
+            if (! $merchant) {
+                continue;
+            }
+
+            foreach ($merchant->products()->where('status', 'active')->get() as $product) {
+                $result = $sync->pull($product)['shopee'] ?? ['ok' => false];
+                $this->line(sprintf(
+                    '[shopee-pull] %s %s -> %s',
+                    $product->title,
+                    ($result['ok'] ?? false) ? 'OK' : 'GAGAL',
+                    $result['ok'] ?? false
+                        ? 'stok lokal = '.$product->fresh()->stock
+                        : ($result['error'] ?? 'tidak ada perubahan'),
+                ));
             }
         }
 
