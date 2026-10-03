@@ -32,6 +32,10 @@ class ShopeeService
     private const PATH_ADD_ITEM = '/api/v2/product/add_item';
     private const PATH_SHOP_INFO = '/api/v2/shop/get_shop_info';
     private const PATH_UPLOAD_IMAGE = '/api/v2/media_space/upload_image';
+    private const PATH_INIT_TIER = '/api/v2/product/init_tier_variation';
+    private const PATH_UPDATE_STOCK = '/api/v2/product/update_stock';
+    private const PATH_UPDATE_PRICE = '/api/v2/product/update_price';
+    private const PATH_GET_MODEL_LIST = '/api/v2/product/get_model_list';
 
     public function publish(Product $product, Channel $channel): array
     {
@@ -255,6 +259,238 @@ class ShopeeService
         }
 
         return $ids;
+    }
+
+    /**
+     * Fase 12: inisialisasi tier Shopee setelah add_item (produk bervarian).
+     *
+     * Alur resmi Shopee: item dulu (add_item) → tunggu ≥5 detik → init model.
+     * Struktur 1 tier "Varian" (opsi = nama varian lokal); tiap model bawa
+     * tier_index [i], original_price efektif (float), seller_stock, model_sku.
+     * respons.response.model[] berisi {model_id, tier_index} → disimpan ke
+     * product_variants.shopee_model_id untuk update_stock/update_price/pull.
+     *
+     * @return array|null  ['mapped' => n] bila sukses; warning di Log bila gagal.
+     */
+    private function pushVariants(Product $product, Channel $channel, int $itemId): ?array
+    {
+        $variants = $product->variants()->orderBy('position')->get();
+        if ($variants->isEmpty()) {
+            return null;
+        }
+
+        $creds = (array) $channel->credentials;
+        $models = [];
+        foreach ($variants->values() as $i => $v) {
+            $models[] = [
+                'tier_index' => [$i],
+                'original_price' => (float) $v->effectivePrice($product),
+                'seller_stock' => [['stock' => (int) $v->stock]],
+            ] + ($v->sku ? ['model_sku' => mb_substr($v->sku, 0, 100)] : []);
+        }
+
+        try {
+            $path = self::PATH_INIT_TIER;
+            $timestamp = time();
+            $sign = $this->sign($creds, $path, $timestamp);
+
+            $res = Http::withHeaders([
+                'Authorization' => $sign,
+                'Content-Type' => 'application/json',
+            ])->timeout(45)->post($this->baseUrl($creds).$path.'?'.http_build_query([
+                'partner_id' => (int) $creds['partner_id'],
+                'timestamp' => $timestamp,
+                'access_token' => $creds['access_token'],
+                'shop_id' => (int) $creds['shop_id'],
+            ]), [
+                'item_id' => $itemId,
+                'tier_variation' => [[
+                    'name' => 'Varian',
+                    'option_list' => $variants->values()->map(fn ($v) => ['option' => mb_substr($v->name, 0, 20)])->all(),
+                ]],
+                'model' => $models,
+            ]);
+
+            if (! $res->successful()) {
+                Log::warning('shopee.init_tier.failed', ['item_id' => $itemId, 'error' => $this->errorOf($res->json(), $res->status())]);
+
+                return null;
+            }
+
+            $mapped = 0;
+            foreach ((array) data_get($res->json(), 'response.model', []) as $m) {
+                $idx = data_get($m, 'tier_index.0');
+                $mid = data_get($m, 'model_id');
+                if ($idx === null || ! $mid) {
+                    continue;
+                }
+                $local = $variants->values()->get((int) $idx);
+                if ($local) {
+                    $local->update(['shopee_model_id' => (string) $mid]);
+                    $mapped++;
+                }
+            }
+
+            return ['mapped' => $mapped, 'total' => $variants->count()];
+        } catch (\Throwable $e) {
+            Log::warning('shopee.init_tier.failed', ['item_id' => $itemId, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Fase 12: update stok per-model (update_stock: stock_list [{model_id, seller_stock[]}])
+     * + harga per-model (update_price: price_list [{model_id, original_price}]).
+     * Dipakai StockSyncService untuk produk bervarian yang sudah terpetakan.
+     */
+    public function pushVariantStock(Channel $channel, int $itemId, array $rows): array
+    {
+        $creds = (array) $channel->credentials;
+
+        try {
+            $stockList = [];
+            foreach ($rows as $r) {
+                if (empty($r['model_id'])) {
+                    continue;
+                }
+                $stockList[] = [
+                    'model_id' => (int) $r['model_id'],
+                    'seller_stock' => [['stock' => max(0, (int) $r['stock'])]],
+                ];
+            }
+            if ($stockList === []) {
+                return ['ok' => false, 'error' => 'Tak ada model Shopee terpetakan untuk produk ini.'];
+            }
+
+            $path = self::PATH_UPDATE_STOCK;
+            $timestamp = time();
+            $sign = $this->sign($creds, $path, $timestamp);
+
+            $res = Http::withHeaders([
+                'Authorization' => $sign,
+                'Content-Type' => 'application/json',
+            ])->timeout(45)->post($this->baseUrl($creds).$path.'?'.http_build_query([
+                'partner_id' => (int) $creds['partner_id'],
+                'timestamp' => $timestamp,
+                'access_token' => $creds['access_token'],
+                'shop_id' => (int) $creds['shop_id'],
+            ]), [
+                'item_id' => $itemId,
+                'stock_list' => $stockList,
+            ]);
+
+            if (! $res->successful()) {
+                return ['ok' => false, 'error' => $this->errorOf($res->json(), $res->status())];
+            }
+
+            $failed = (array) data_get($res->json(), 'response.failure_list', []);
+            if ($failed !== []) {
+                return ['ok' => false, 'error' => 'Shopee menolak '.count($failed).' model: '.mb_substr(json_encode($failed), 0, 300)];
+            }
+
+            return ['ok' => true, 'data' => $res->json()];
+        } catch (\Throwable $e) {
+            Log::warning('shopee.update_stock.failed', ['item_id' => $itemId, 'error' => $e->getMessage()]);
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    public function pushVariantPrice(Channel $channel, int $itemId, array $rows): array
+    {
+        $creds = (array) $channel->credentials;
+
+        try {
+            $priceList = [];
+            foreach ($rows as $r) {
+                if (empty($r['model_id'])) {
+                    continue;
+                }
+                $priceList[] = [
+                    'model_id' => (int) $r['model_id'],
+                    'original_price' => (float) $r['price'],
+                ];
+            }
+            if ($priceList === []) {
+                return ['ok' => false, 'error' => 'Tak ada model Shopee terpetakan untuk produk ini.'];
+            }
+
+            $path = self::PATH_UPDATE_PRICE;
+            $timestamp = time();
+            $sign = $this->sign($creds, $path, $timestamp);
+
+            $res = Http::withHeaders([
+                'Authorization' => $sign,
+                'Content-Type' => 'application/json',
+            ])->timeout(45)->post($this->baseUrl($creds).$path.'?'.http_build_query([
+                'partner_id' => (int) $creds['partner_id'],
+                'timestamp' => $timestamp,
+                'access_token' => $creds['access_token'],
+                'shop_id' => (int) $creds['shop_id'],
+            ]), [
+                'item_id' => $itemId,
+                'price_list' => $priceList,
+            ]);
+
+            if (! $res->successful()) {
+                return ['ok' => false, 'error' => $this->errorOf($res->json(), $res->status())];
+            }
+
+            $failed = (array) data_get($res->json(), 'response.failure_list', []);
+            if ($failed !== []) {
+                return ['ok' => false, 'error' => 'Shopee menolak '.count($failed).' model: '.mb_substr(json_encode($failed), 0, 300)];
+            }
+
+            return ['ok' => true, 'data' => $res->json()];
+        } catch (\Throwable $e) {
+            Log::warning('shopee.update_price.failed', ['item_id' => $itemId, 'error' => $e->getMessage()]);
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Fase 12: daftar model Shopee (get_model_list): {model_id, tier_index,
+     * model_sku, stock_info_v2.seller_stock[], price_info[].original_price}.
+     * Pemetaan balik dilakukan pemanggil via model_id/model_sku.
+     */
+    public function fetchModels(Channel $channel, int $itemId): array
+    {
+        $creds = (array) $channel->credentials;
+        $missing = $this->missing($creds);
+        if ($missing) {
+            return ['ok' => false, 'error' => "Kredensial Shopee kurang: {$missing}."];
+        }
+
+        try {
+            $path = self::PATH_GET_MODEL_LIST;
+            $timestamp = time();
+            $sign = $this->sign($creds, $path, $timestamp);
+
+            $res = Http::withHeaders(['Authorization' => $sign])
+                ->timeout(30)->get($this->baseUrl($creds).$path.'?'.http_build_query([
+                    'partner_id' => (int) $creds['partner_id'],
+                    'timestamp' => $timestamp,
+                    'access_token' => $creds['access_token'],
+                    'shop_id' => (int) $creds['shop_id'],
+                    'item_id' => $itemId,
+                ]));
+
+            if (! $res->successful()) {
+                return ['ok' => false, 'error' => $this->errorOf($res->json(), $res->status())];
+            }
+
+            return [
+                'ok' => true,
+                'tier_variation' => data_get($res->json(), 'response.tier_variation', []),
+                'models' => data_get($res->json(), 'response.model', []),
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('shopee.get_model_list.failed', ['item_id' => $itemId, 'error' => $e->getMessage()]);
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
     }
 
     private function baseUrl(array $creds): string

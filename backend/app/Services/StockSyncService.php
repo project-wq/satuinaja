@@ -102,6 +102,35 @@ class StockSyncService
         }
 
         try {
+            $itemId = $this->externalIdOf($product, $channel);
+            if (! $itemId) {
+                return ['ok' => false, 'error' => 'Produk belum pernah dipublish ke channel ini (tak ada external_id).'];
+            }
+
+            // Fase 12: produk bervarian yang sudah terpetakan → update_stock +
+            // update_price per-model; bukan update_item agregat.
+            $mapped = $product->variants()
+                ->whereNotNull('shopee_model_id')
+                ->orderBy('position')
+                ->get();
+            if ($product->variants()->exists() && $mapped->isNotEmpty()) {
+                $rows = $mapped->map(fn ($v) => [
+                    'model_id' => $v->shopee_model_id,
+                    'stock' => $v->stock,
+                    'price' => $v->effectivePrice($product),
+                ])->all();
+
+                $stock = $this->shopee->pushVariantStock($channel, $itemId, $rows);
+                if (! $stock['ok']) {
+                    return $stock;
+                }
+                if (! $includeContent) {
+                    return $stock;
+                }
+
+                return $this->shopee->pushVariantPrice($channel, $itemId, $rows);
+            }
+
             $path = '/api/v2/product/update_item';
             $timestamp = time();
             $baseString = $creds['partner_id'].$path.$timestamp.$creds['access_token'].$creds['shop_id'];
@@ -122,7 +151,7 @@ class StockSyncService
             ]), [
                 // item_id asli dari log publish sukses (bukan product_hashes —
                 // kolom itu menyimpan md5 perubahan, BUKAN external_id).
-                'item_id' => $this->externalIdOf($product, $channel),
+                'item_id' => $itemId,
                 'stock' => (int) $product->stock,
             ] + ($includeContent ? [
                 // Konten: judul/harga/deskripsi ikut terkirim (update_item
@@ -158,6 +187,8 @@ class StockSyncService
      * Two-way sync (Fase 7): tarik stok asli dari marketplace → produk lokal.
      * Sumber stok: PublishLog.status=success (punya external_id saat publish).
      * Saat ini didukung Shopee (get_item_base_info).
+     * Fase 12: produk bervarian → get_model_list, petakan per model_id/sku,
+     * update stok tiap varian, lalu re-agregat products.stock.
      *
      * @return array<int, array>  hasil per produk
      */
@@ -192,6 +223,15 @@ class StockSyncService
                 continue;
             }
 
+            // Fase 12: varian terpetakan → pull per-model.
+            $mapped = $product->variants()
+                ->whereNotNull('shopee_model_id')
+                ->get();
+            if ($product->variants()->exists() && $mapped->isNotEmpty()) {
+                $results[$channel->platform] = $this->pullVariants($product, $channel, (int) $externalId, $mapped);
+                continue;
+            }
+
             $r = $this->shopee->pullStock($channel, (string) $externalId);
             if ($r['ok']) {
                 $product->update(['stock' => (int) $r['stock']]);
@@ -200,5 +240,51 @@ class StockSyncService
         }
 
         return $results;
+    }
+
+    /**
+     * Fase 12: pull stok per-varian dari get_model_list.
+     * Pemetaan: shopee_model_id dulu, fallback model_sku == varian.sku.
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\ProductVariant>  $mapped
+     */
+    private function pullVariants(Product $product, Channel $channel, int $itemId, $mapped): array
+    {
+        $r = $this->shopee->fetchModels($channel, $itemId);
+        if (! $r['ok']) {
+            return $r;
+        }
+
+        $byId = [];
+        $bySku = [];
+        foreach ((array) ($r['models'] ?? []) as $m) {
+            $mid = (string) ($m['model_id'] ?? '');
+            if ($mid !== '') {
+                $byId[$mid] = $m;
+            }
+            $sku = (string) ($m['model_sku'] ?? '');
+            if ($sku !== '') {
+                $bySku[$sku] = $m;
+            }
+        }
+
+        $updated = 0;
+        foreach ($mapped as $v) {
+            $m = $byId[(string) $v->shopee_model_id]
+                ?? ($v->sku ? ($bySku[$v->sku] ?? null) : null);
+            if (! $m) {
+                continue;
+            }
+            $seller = data_get($m, 'stock_info_v2.seller_stock');
+            $stock = is_array($seller) && $seller !== []
+                ? array_sum(array_map(fn ($s) => (int) ($s['stock'] ?? 0), $seller))
+                : (int) data_get($m, 'stock_info_v2.seller_stock.0.stock', $v->stock);
+            $v->update(['stock' => max(0, $stock)]);
+            $updated++;
+        }
+
+        $product->update(['stock' => (int) $product->variants()->sum('stock')]);
+
+        return ['ok' => true, 'variants_updated' => $updated, 'total' => $mapped->count()];
     }
 }
