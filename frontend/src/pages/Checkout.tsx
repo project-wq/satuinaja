@@ -105,7 +105,7 @@ export default function Checkout() {
         ...form,
         service: selected.service,
         shipping_cost: selected.cost,
-        items: items.map((i) => ({ product_id: i.productId, qty: i.qty })),
+        items: items.map((i) => ({ product_id: i.productId, variant_id: i.variantId, qty: i.qty })),
       })
 
       clear()
@@ -148,24 +148,27 @@ export default function Checkout() {
             <h2 className="font-semibold mb-3">Keranjang</h2>
             <ul className="divide-y divide-slate-100">
               {items.map((i) => (
-                <li key={i.productId} className="py-3 flex items-center gap-3">
+                <li key={`${i.productId}:${i.variantId ?? 0}`} className="py-3 flex items-center gap-3">
                   <div className="w-14 h-14 rounded-lg bg-slate-100 overflow-hidden shrink-0">
                     {i.image && <img src={i.image} alt="" className="w-full h-full object-cover" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{i.title}</p>
-                    <p className="text-xs text-slate-500">{rupiah(i.price)}</p>
+                    <p className="text-xs text-slate-500">
+                      {rupiah(i.price)}
+                      {i.variantName && <span className="text-slate-400"> · {i.variantName}</span>}
+                    </p>
                   </div>
                   <div className="flex items-center rounded-lg border border-slate-300 text-sm">
-                    <button type="button" onClick={() => setQty(i.productId, i.qty - 1)} className="px-2 py-1">
+                    <button type="button" onClick={() => setQty(i.productId, i.qty - 1, i.variantId)} className="px-2 py-1">
                       −
                     </button>
                     <span className="px-2 tabular-nums">{i.qty}</span>
-                    <button type="button" onClick={() => setQty(i.productId, i.qty + 1)} className="px-2 py-1">
+                    <button type="button" onClick={() => setQty(i.productId, i.qty + 1, i.variantId)} className="px-2 py-1">
                       +
                     </button>
                   </div>
-                  <button type="button" onClick={() => remove(i.productId)} className="text-xs text-rose-600 px-2">
+                  <button type="button" onClick={() => remove(i.productId, i.variantId)} className="text-xs text-rose-600 px-2">
                     hapus
                   </button>
                 </li>

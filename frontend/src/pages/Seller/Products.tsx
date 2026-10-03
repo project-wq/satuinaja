@@ -47,6 +47,58 @@ export default function Products() {
     },
   })
 
+  // ---- Fase 11: editor varian ----
+  const [variantFor, setVariantFor] = useState<Product | null>(null)
+  const [vrows, setVrows] = useState<{ name: string; price: string; stock: string; sku: string }[]>([])
+
+  async function openVariants(p: Product) {
+    try {
+      const res = await api.get<{ data: Product }>(`/products/${p.id}`)
+      const vs = res.data.variants ?? []
+      setVrows(
+        vs.length
+          ? vs.map((v) => ({
+              name: v.name,
+              price: v.price === null ? '' : String(v.price),
+              stock: String(v.stock),
+              sku: v.sku ?? '',
+            }))
+          : [{ name: '', price: '', stock: '0', sku: '' }],
+      )
+      setVariantFor(p)
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal memuat varian')
+    }
+  }
+
+  const saveVariants = useMutation({
+    mutationFn: (payload: { id: number; variants: { name: string; price: number | null; stock: number; sku: string | null }[] }) =>
+      api.put(`/products/${payload.id}/variants`, { variants: payload.variants }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] })
+      setToast('Varian tersimpan.')
+      setVariantFor(null)
+    },
+    onError: (e) => setToast(e instanceof Error ? e.message : 'Gagal simpan varian'),
+  })
+
+  function submitVariants() {
+    if (!variantFor) return
+    const variants = vrows
+      .filter((r) => r.name.trim() !== '')
+      .map((r) => ({
+        name: r.name.trim(),
+        sku: r.sku.trim() || null,
+        price: r.price.trim() === '' ? null : Number(r.price),
+        stock: Math.max(0, Number(r.stock) || 0),
+      }))
+    if (variants.length === 0) {
+      setToast('Isi minimal satu varian (atau biarkan kosong untuk hapus semua).')
+      return
+    }
+    saveVariants.mutate({ id: variantFor.id, variants })
+  }
+
   async function generateCaption(product: Product) {
     setBusyAi(true)
     setAiResult('')
@@ -101,6 +153,89 @@ export default function Products() {
           <button onClick={() => setToast('')} className="opacity-70">
             ✕
           </button>
+        </div>
+      )}
+
+      {variantFor && (
+        <div className="bg-white rounded-xl border border-amber-200 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold">Varian — {variantFor.title}</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Kosongkan harga = ikut harga produk. Stok produk otomatis = jumlah stok varian.
+              </p>
+            </div>
+            <button onClick={() => setVariantFor(null)} className="text-slate-400 hover:text-slate-600">
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {vrows.map((r, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <input
+                  value={r.name}
+                  onChange={(e) => setVrows(vrows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                  placeholder="Nama (M, L, Merah / XL)"
+                  className="col-span-4 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <input
+                  value={r.sku}
+                  onChange={(e) => setVrows(vrows.map((x, j) => (j === i ? { ...x, sku: e.target.value } : x)))}
+                  placeholder="SKU (opsional)"
+                  className="col-span-3 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={r.price}
+                  onChange={(e) => setVrows(vrows.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))}
+                  placeholder="Harga (ikut produk)"
+                  className="col-span-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={r.stock}
+                  onChange={(e) => setVrows(vrows.map((x, j) => (j === i ? { ...x, stock: e.target.value } : x)))}
+                  placeholder="Stok"
+                  className="col-span-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <button
+                  onClick={() => setVrows(vrows.filter((_, j) => j !== i))}
+                  className="col-span-1 text-rose-500 text-sm"
+                  title="Hapus baris"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setVrows([...vrows, { name: '', price: '', stock: '0', sku: '' }])}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50"
+            >
+              + Tambah varian
+            </button>
+            <button
+              onClick={submitVariants}
+              disabled={saveVariants.isPending}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white disabled:opacity-50"
+            >
+              {saveVariants.isPending ? 'Menyimpan…' : 'Simpan Varian'}
+            </button>
+            <button
+              onClick={() => {
+                setVrows([])
+                saveVariants.mutate({ id: variantFor.id, variants: [] })
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600"
+            >
+              Hapus semua varian
+            </button>
+          </div>
         </div>
       )}
 
@@ -252,6 +387,12 @@ export default function Products() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => openVariants(p)}
+                        className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50"
+                      >
+                        Varian
+                      </button>
                       <button
                         onClick={() => generateCaption(p)}
                         disabled={busyAi}
