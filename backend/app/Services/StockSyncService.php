@@ -131,6 +131,7 @@ class StockSyncService
                 'item_name' => mb_substr($product->title, 0, 120),
                 'description' => (string) ($product->description ?? $product->title),
             ] : []),
+            );
 
             if (! $res->successful()) {
                 return ['ok' => false, 'error' => data_get($res->json(), 'error', 'HTTP '.$res->status())];

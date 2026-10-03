@@ -67,72 +67,106 @@ class Phase10Test extends TestCase
     }
 
     public function test_sync_stock_repushes_after_content_change(): void
-    {
-        Http::fake([
-            '*/api/v2/product/update_item*' => Http::response(['response' => ['success' => true]], 200),
-        ]);
+        {
+            Http::fake([
+                '*/api/v2/product/update_item*' => Http::response(['response' => ['success' => true]], 200),
+            ]);
 
-        [$m, $p, $c] = $this->seedShop();
+            [, $p] = $this->seedShop();
 
-        $this->artisan('satu:sync-stock')->assertExitCode(0);
-        Http::assertSentCount(1);
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
+            Http::assertSentCount(1);
 
-        // Edit harga → hash beda → push lagi.
-        $p->update(['price' => 21000]);
-        $this->artisan('satu:sync-stock')->assertExitCode(0);
-        Http::assertSentCount(2);
-    }
+            // Edit harga → hash beda → push lagi.
+            $p->update(['price' => 21000]);
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
+            Http::assertSentCount(2);
+        }
 
-    public function test_sync_stock_holds_republish_within_flap_window(): void
-    {
-        Http::fake([
-            '*/api/v2/product/update_item*' => Http::response(['response' => ['success' => true]], 200),
-        ]);
+        public function test_sync_stock_pushes_content_when_no_sync_window(): void
+        {
+            Http::fake([
+                '*/api/v2/product/update_item*' => Http::response(['response' => ['success' => true]], 200),
+            ]);
 
-        [$m, $p, $c] = $this->seedShop();
+            [, $p, $c] = $this->seedShop();
 
-        $this->artisan('satu:sync-stock')->assertExitCode(0);
-        Http::assertSentCount(1);
+            // Hash lama tersimpan tapi tanpa synced_at → tidak dalam
+            // jendela flap → konten ikut terkirim penuh.
+            $c->update(['product_hashes' => [$p->id => ['hash' => 'stale']]]);
 
-        // Edit → push berhasil → flap_at = now.
-        $p->update(['title' => 'Produk Baru']);
-        $this->artisan('satu:sync-stock')->assertExitCode(0);
-        Http::assertSentCount(2);
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
 
-        // Edit lagi dalam 10 menit → DITAHAN (anti-flap).
-        $p->update(['title' => 'Produk Edit 2']);
-        $this->artisan('satu:sync-stock')->assertExitCode(0);
-        Http::assertSentCount(2); // tidak bertambah
+            Http::assertSent(fn ($req) => str_contains($req->url(), '/api/v2/product/update_item')
+                && data_get($req->data(), 'item_name') === 'Produk'
+                && (float) data_get($req->data(), 'original_price') === 20000.0);
+        }
 
-        // Lewat 10 menit → lolos, push.
-        $hashes = $c->fresh()->product_hashes;
-        $hashes[$p->id]['flap_at'] = now()->subMinutes(11)->toISOString();
-        $c->update(['product_hashes' => $hashes]);
+        public function test_sync_stock_holds_content_within_flap_window(): void
+        {
+            Http::fake([
+                '*/api/v2/product/update_item*' => Http::response(['response' => ['success' => true]], 200),
+            ]);
 
-        $p->update(['title' => 'Produk Edit 3']);
-        $this->artisan('satu:sync-stock')->assertExitCode(0);
-        Http::assertSentCount(3);
-    }
+            [, $p, $c] = $this->seedShop();
 
-    public function test_sync_stock_legacy_string_hash_backcompat(): void
-    {
-        Http::fake([
-            '*/api/v2/product/update_item*' => Http::response(['response' => ['success' => true]], 200),
-        ]);
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
+            Http::assertSentCount(1);
 
-        [$m, $p, $c] = $this->seedShop();
+            // Edit → push pertama sukses → synced_at = now.
+            $p->update(['title' => 'Edit Pertama']);
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
+            Http::assertSentCount(2);
 
-        // Simulasi data lama: string md5 tanpa struct.
-        $hashes = $c->product_hashes ?? [];
-        $hashes[$p->id] = md5('x'); // format lama
-        $c->update(['product_hashes' => $hashes]);
+            // Edit lagi <10 menit → konten DITAHAN, tapi stok tetap di-push.
+            $p->update(['title' => 'Edit Kedua', 'stock' => 9]);
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
+            Http::assertSentCount(3);
 
-        $this->artisan('satu:sync-stock')->assertExitCode(0);
+            // Request terakhir: stok terkirim, konten TIDAK.
+            $last = null;
+            Http::recorded(function ($request) use (&$last) {
+                if (str_contains($request->url(), '/api/v2/product/update_item')) {
+                    $last = $request->data();
+                }
 
-        // Hash string lama beda dengan hash baru → push terjadi tanpa crash.
-        Http::assertSentCount(1);
+                return true;
+            });
+            $this->assertSame(9, (int) $last['stock']);
+            $this->assertArrayNotHasKey('item_name', $last);
+            $this->assertArrayNotHasKey('original_price', $last);
 
-        // Sekarang tersimpan dalam format struct.
-        $this->assertIsArray($c->fresh()->product_hashes[$p->id]);
-    }
+            // Hash null → setelah jendela lewat, konten terkirim penuh.
+            $hashes = $c->fresh()->product_hashes;
+            $this->assertNull($hashes[$p->id]['hash']);
+            $hashes[$p->id]['synced_at'] = now()->subMinutes(11)->toISOString();
+            $c->update(['product_hashes' => $hashes]);
+
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
+            Http::assertSentCount(4);
+            Http::assertSent(fn ($req) => str_contains($req->url(), '/api/v2/product/update_item')
+                && data_get($req->data(), 'item_name') === 'Edit Kedua');
+        }
+
+        public function test_sync_stock_legacy_string_hash_backcompat(): void
+        {
+            Http::fake([
+                '*/api/v2/product/update_item*' => Http::response(['response' => ['success' => true]], 200),
+            ]);
+
+            [, $p, $c] = $this->seedShop();
+
+            // Simulasi data lama: string md5 tanpa struct.
+            $hashes = $c->product_hashes ?? [];
+            $hashes[$p->id] = md5('x'); // format lama
+            $c->update(['product_hashes' => $hashes]);
+
+            $this->artisan('satu:sync-stock')->assertExitCode(0);
+
+            // Hash string lama beda dengan hash baru → push terjadi tanpa crash.
+            Http::assertSentCount(1);
+
+            // Sekarang tersimpan dalam format struct.
+            $this->assertIsArray($c->fresh()->product_hashes[$p->id]);
+        }
 }

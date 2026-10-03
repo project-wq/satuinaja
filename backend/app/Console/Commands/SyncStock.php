@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Channel;
 use App\Models\Merchant;
+use App\Models\Product;
 use App\Services\StockSyncService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -49,19 +50,21 @@ class SyncStock extends Command
                     continue; // tak ada perubahan
                 }
 
-                // Anti-flap: kalau sudah republish dalam 10 menit terakhir
-                // dan hash masih berubah, tahan (produk sedang diedit).
-                $flapAt = isset($prev['flap_at']) ? Carbon::parse($prev['flap_at']) : null;
-                if ($flapAt && $flapAt->gt(now()->subMinutes(10))) {
+                // Anti-flap: kalau sudah sync <10 menit lalu konten berubah
+                // lagi (produk sedang diedit), push stok saja dulu — konten
+                // dikirim setelah jendela edit tenang.
+                $syncedAt = isset($prev['synced_at']) ? Carbon::parse($prev['synced_at']) : null;
+                $flap = $syncedAt && $syncedAt->gt(now()->subMinutes(10));
+
+                if ($flap) {
                     $this->line(sprintf(
-                        '[%s] %s DITAHAN (kemungkinan sedang diedit; coba lagi nanti)',
+                        '[%s] %s KONTEN DITAHAN (edit beruntun; stok tetap di-push)',
                         $channel->platform, $product->title,
                     ));
-                    continue;
                 }
 
-                $result = $sync->sync($product)[$channel->platform] ?? ['ok' => false];
-                $error = $result['error'] ?? ($result['skipped'] ? 'skip (platform tanpa update stok)' : 'ok');
+                $result = $sync->sync($product, includeContent: ! $flap)[$channel->platform] ?? ['ok' => false];
+                $error = $result['error'] ?? (($result['skipped'] ?? false) ? 'skip (platform tanpa update stok)' : 'ok');
                 $this->line(sprintf(
                     '[%s] %s %s -> %s',
                     $channel->platform,
@@ -71,11 +74,19 @@ class SyncStock extends Command
                 ));
 
                 if ($result['ok'] ?? false) {
-                    $hashes[$product->id] = [
-                        'hash' => $hash,
-                        'updated_at' => now()->toISOString(),
-                        'flap_at' => $flapAt ? now()->toISOString() : null,
-                    ];
+                    if ($flap) {
+                        // Konten belum terkirim → hash TIDAK disimpan,
+                        // run berikutnya (setelah 10 menit) push konten penuh.
+                        $hashes[$product->id] = [
+                            'hash' => null, // sengaja: paksa push konten nanti
+                            'synced_at' => now()->toISOString(),
+                        ];
+                    } else {
+                        $hashes[$product->id] = [
+                            'hash' => $hash,
+                            'synced_at' => now()->toISOString(),
+                        ];
+                    }
                     $channel->update(['product_hashes' => $hashes]);
                 } elseif (! ($result['skipped'] ?? false)) {
                     // Gagal (bukan skip) → retry otomatis tiap 5 menit oleh scheduler.
@@ -88,7 +99,7 @@ class SyncStock extends Command
     }
 
     /** md5 dari field yang menentukan konten produk di channel. */
-    private function hashOf($product, string $platform): string
+    private function hashOf(Product $product, string $platform): string
     {
         $images = is_array($product->images) ? implode('|', $product->images) : '';
         return md5(implode('|', [
