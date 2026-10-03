@@ -31,6 +31,7 @@ class ShopeeService
 {
     private const PATH_ADD_ITEM = '/api/v2/product/add_item';
     private const PATH_SHOP_INFO = '/api/v2/shop/get_shop_info';
+    private const PATH_UPLOAD_IMAGE = '/api/v2/media_space/upload_image';
 
     public function publish(Product $product, Channel $channel): array
     {
@@ -39,6 +40,8 @@ class ShopeeService
         if ($missing) {
             return ['ok' => false, 'error' => "Kredensial Shopee kurang: {$missing}."];
         }
+
+        $imageIdList = $this->uploadImages($product, $channel);
 
         $body = [
             'original_price' => (float) $product->price,
@@ -53,7 +56,7 @@ class ShopeeService
             ],
             'logistic_info' => [],
             'image' => [
-                'image_id_list' => [], // Shopee minta upload gambar dulu via /media_space/upload_image
+                'image_id_list' => $imageIdList,
             ],
         ];
 
@@ -201,6 +204,54 @@ class ShopeeService
 
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Upload gambar produk ke Shopee media space → daftar image_id.
+     * Shopee /media_space/upload_image menerima URL publik via query `url`;
+     * response: response.image_info.image_id. Gagal upload 1 gambar tidak
+     * menggagalkan publish (item tayang tanpa foto tsb).
+     */
+    private function uploadImages(Product $product, Channel $channel): array
+    {
+        $images = array_values(array_filter((array) $product->images, fn ($u) => is_string($u) && $u !== ''));
+        if ($images === []) {
+            return [];
+        }
+
+        $creds = (array) $channel->credentials;
+        $ids = [];
+
+        foreach (array_slice($images, 0, 9) as $url) {
+            try {
+                $path = self::PATH_UPLOAD_IMAGE;
+                $timestamp = time();
+                $sign = $this->sign($creds, $path, $timestamp);
+
+                $res = Http::withHeaders([
+                    'Authorization' => $sign,
+                ])->timeout(45)->get($this->baseUrl($creds).$path.'?'.http_build_query([
+                    'partner_id' => (int) $creds['partner_id'],
+                    'timestamp' => $timestamp,
+                    'access_token' => $creds['access_token'],
+                    'shop_id' => (int) $creds['shop_id'],
+                    'url' => $url,
+                ]));
+
+                if (! $res->successful()) {
+                    continue;
+                }
+
+                $imageId = data_get($res->json(), 'response.image_info.image_id');
+                if ($imageId) {
+                    $ids[] = (string) $imageId;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('shopee.upload_image.failed', ['url' => mb_substr($url, 0, 120)]);
+            }
+        }
+
+        return $ids;
     }
 
     private function baseUrl(array $creds): string
