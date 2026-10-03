@@ -95,9 +95,11 @@ class MarketplaceWebhookController extends Controller
     private function normalize(string $platform, array $payload): array
     {
         if ($platform === 'shopee') {
-            // Shopee push: { ordersn / order_sn, buyer_username, item_list: [{item_id, model_id, quantity, ...}] }
+            // Shopee push: { ordersn / order_sn, buyer_username, item_list: [{item_id, model_id, model_sku, quantity, ...}] }
             $items = array_map(fn ($i) => [
                 'sku' => (string) ($i['item_sku'] ?? $i['sku'] ?? $i['model_sku'] ?? ''),
+                'model_sku' => (string) ($i['model_sku'] ?? ''),
+                'model_id' => isset($i['model_id']) ? (string) $i['model_id'] : null,
                 'external_item_id' => $i['item_id'] ?? null,
                 'qty' => (int) ($i['quantity'] ?? $i['model_quantity_purchased'] ?? 1),
             ], (array) data_get($payload, 'item_list', data_get($payload, 'items', [])));

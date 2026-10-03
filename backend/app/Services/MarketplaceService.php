@@ -31,7 +31,11 @@ class MarketplaceService
     /**
      * Buat/ambil order dari payload marketplace.
      *
-     * @param  array  $data  {external_order_id, buyer_name, buyer_phone?, shipping_address?, items:[{sku|product_id, qty, price?}]}
+     * Fase 13: item boleh membawa model_sku/model_id Shopee — dicocokkan ke
+     * varian lokal (model_sku == variant.sku, atau shopee_model_id). Harga,
+     * fee, dan potong stok mengikuti varian; order_items.variant_id diisi.
+     *
+     * @param  array  $data  {external_order_id, buyer_name, buyer_phone?, shipping_address?, items:[{sku|product_id|model_sku|model_id, qty, price?}]}
      * @return array {order: Order, created: bool, unmatched: string[]}
      */
     public function ingest(Channel $channel, array $data): array
@@ -73,7 +77,7 @@ class MarketplaceService
 
                 $product = $this->resolveProduct($channel, $item);
                 if (! $product) {
-                    $unmatched[] = (string) ($item['sku'] ?? $item['product_id'] ?? '?');
+                    $unmatched[] = (string) ($item['sku'] ?? $item['product_id'] ?? $item['model_sku'] ?? $item['model_id'] ?? '?');
                     continue;
                 }
 
@@ -83,9 +87,14 @@ class MarketplaceService
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                $f = $this->fee->line($product->price, $product->discount_price, $qty);
+                // Fase 13: cocokkan varian via model_sku/model_id Shopee.
+                $variant = $this->resolveVariant($product, $item);
+                $unitPrice = $variant ? $variant->effectivePrice($product) : $product->price;
+                $unitDiscount = $variant ? null : $product->discount_price;
 
-                $subtotal += $product->price * $qty;
+                $f = $this->fee->line($unitPrice, $unitDiscount, $qty);
+
+                $subtotal += $unitPrice * $qty;
                 $discountTotal += $f['discount'];
                 $subtotalSale += $f['base_sale'];
                 $buyerFeeTotal += $f['buyer_fee'];
@@ -94,9 +103,10 @@ class MarketplaceService
 
                 $lines[] = [
                     'product_id' => $product->id,
-                    'title' => $product->title,
-                    'price' => $product->price,
-                    'discount_price' => $product->discount_price,
+                    'variant_id' => $variant?->id,
+                    'title' => $product->title.($variant ? ' — '.$variant->name : ''),
+                    'price' => $unitPrice,
+                    'discount_price' => $unitDiscount,
                     'qty' => $qty,
                     'line_total' => $f['base_sale'],
                     'buyer_fee' => $f['buyer_fee'],
@@ -104,8 +114,13 @@ class MarketplaceService
                     'seller_net' => $f['seller_net'],
                 ];
 
-                // Potong stok lokal (tidak negatif).
-                $product->update(['stock' => max(0, $product->stock - $qty)]);
+                // Potong stok lokal (tidak negatif): varian bila ada, lalu agregat.
+                if ($variant) {
+                    $variant->update(['stock' => max(0, $variant->stock - $qty)]);
+                    $product->update(['stock' => max(0, (int) $product->variants()->sum('stock'))]);
+                } else {
+                    $product->update(['stock' => max(0, $product->stock - $qty)]);
+                }
             }
 
             if ($lines === []) {
@@ -163,7 +178,7 @@ class MarketplaceService
         return ['order' => $order, 'created' => true, 'unmatched' => $unmatched];
     }
 
-    /** Cocokkan item payload ke produk lokal: product_id dulu, lalu slug (SKU). */
+    /** Cocokkan item payload ke produk lokal: product_id dulu, lalu slug (SKU), lalu model_sku/model_id ke varian. */
     private function resolveProduct(Channel $channel, array $item): ?Product
     {
         $q = Product::withoutGlobalScope('merchant')->where('merchant_id', $channel->merchant_id);
@@ -176,7 +191,59 @@ class MarketplaceService
         }
 
         if (! empty($item['sku'])) {
-            return (clone $q)->where('slug', (string) $item['sku'])->first();
+            $p = (clone $q)->where('slug', (string) $item['sku'])->first();
+            if ($p) {
+                return $p;
+            }
+        }
+
+        // Fase 13: Shopee kirim model_sku/item_sku atau model_id — cocokkan
+        // lewat varian (sku / shopee_model_id), kembalikan produk induknya.
+        $modelSku = (string) ($item['model_sku'] ?? $item['item_sku'] ?? '');
+        $modelId = (string) ($item['model_id'] ?? '');
+        if ($modelSku !== '' || $modelId !== '') {
+            $variant = \App\Models\ProductVariant::query()
+                ->whereHas('product', fn ($pq) => $pq->withoutGlobalScope('merchant')->where('merchant_id', $channel->merchant_id))
+                ->when($modelId !== '', fn ($vq) => $vq->where('shopee_model_id', $modelId))
+                ->when($modelId === '' && $modelSku !== '', fn ($vq) => $vq->where('sku', $modelSku))
+                ->first();
+            if ($variant) {
+                return $variant->product;
+            }
+            // model_sku Shopee = sku varian lokal, tapi item-level sku bisa
+            // juga sama dengan slug produk (produk tanpa varian).
+            if ($modelSku !== '') {
+                $p = (clone $q)->where('slug', $modelSku)->first();
+                if ($p) {
+                    return $p;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fase 13: cocokkan varian dalam produk yang sudah ter-resolve.
+     * Urutan: shopee_model_id (model_id) → sku varian (model_sku/item_sku/sku).
+     */
+    private function resolveVariant(Product $product, array $item): ?\App\Models\ProductVariant
+    {
+        $modelId = (string) ($item['model_id'] ?? '');
+        $modelSku = (string) ($item['model_sku'] ?? $item['item_sku'] ?? $item['sku'] ?? '');
+
+        $q = $product->variants();
+        if ($modelId !== '') {
+            $v = (clone $q)->where('shopee_model_id', $modelId)->first();
+            if ($v) {
+                return $v;
+            }
+        }
+        if ($modelSku !== '') {
+            $v = (clone $q)->where('sku', $modelSku)->first();
+            if ($v) {
+                return $v;
+            }
         }
 
         return null;
