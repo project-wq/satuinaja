@@ -33,6 +33,7 @@ class CheckoutController extends Controller
             'merchant_slug' => ['required', 'string', 'exists:merchants,slug'],
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:1000'],
             'shipping_cost' => ['nullable', 'integer', 'min:0'],
         ]);
@@ -60,6 +61,7 @@ class CheckoutController extends Controller
             'shipping_cost' => ['required', 'integer', 'min:0', 'max:10000000'],
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
+            'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:1000'],
         ]);
 
@@ -82,13 +84,28 @@ class CheckoutController extends Controller
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if ($product->stock < $item['qty']) {
-                    abort(422, "Stok {$product->title} tidak cukup (tersisa {$product->stock}).");
+                // Fase 11: varian dipilih → harga & stok dari varian.
+                $variant = null;
+                $basePrice = $product->price;
+                $nameSuffix = '';
+                if (! empty($item['variant_id'])) {
+                    $variant = $product->variants()
+                        ->whereKey($item['variant_id'])
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                    $basePrice = $variant->effectivePrice($product);
+                    $nameSuffix = ' — '.$variant->name;
                 }
 
-                $f = $this->fee->line($product->price, $product->discount_price, $item['qty']);
+                $stockLeft = $variant ? $variant->stock : $product->stock;
+                if ($stockLeft < $item['qty']) {
+                    $label = $product->title.($variant ? " ({$variant->name})" : '');
+                    abort(422, "Stok {$label} tidak cukup (tersisa {$stockLeft}).");
+                }
 
-                $subtotal += $product->price * $item['qty'];
+                $f = $this->fee->line($basePrice, $product->discount_price, $item['qty']);
+
+                $subtotal += $basePrice * $item['qty'];
                 $discountTotal += $f['discount'];
                 $subtotalSale += $f['base_sale'];
                 $buyerFeeTotal += $f['buyer_fee'];
@@ -97,8 +114,8 @@ class CheckoutController extends Controller
 
                 $lines[] = [
                     'product_id' => $product->id,
-                    'title' => $product->title,
-                    'price' => $product->price,
+                    'title' => $product->title.$nameSuffix,
+                    'price' => $basePrice,
                     'discount_price' => $product->discount_price,
                     'qty' => $item['qty'],
                     'line_total' => $f['base_sale'],
@@ -107,6 +124,9 @@ class CheckoutController extends Controller
                     'seller_net' => $f['seller_net'],
                 ];
 
+                if ($variant) {
+                    $variant->decrement('stock', $item['qty']);
+                }
                 $product->decrement('stock', $item['qty']);
             }
 
@@ -234,12 +254,20 @@ class CheckoutController extends Controller
                 ->where('status', 'active')
                 ->firstOrFail();
 
-            $f = $this->fee->line($product->price, $product->discount_price, $item['qty']);
+            $basePrice = $product->price;
+            $title = $product->title;
+            if (! empty($item['variant_id'])) {
+                $variant = $product->variants()->whereKey($item['variant_id'])->firstOrFail();
+                $basePrice = $variant->effectivePrice($product);
+                $title .= ' — '.$variant->name;
+            }
+
+            $f = $this->fee->line($basePrice, $product->discount_price, $item['qty']);
 
             $rows[] = [
                 'product_id' => $product->id,
-                'title' => $product->title,
-                'price' => $product->price,
+                'title' => $title,
+                'price' => $basePrice,
                 'discount_price' => $product->discount_price,
                 'qty' => $item['qty'],
                 'unit_sale' => $f['unit_sale'],

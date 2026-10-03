@@ -51,7 +51,7 @@ class StorefrontController extends Controller
 
         return response()->json(['data' => [
             'merchant' => ['name' => $merchant->name, 'slug' => $merchant->slug, 'city_id' => $merchant->city_id],
-            'product' => $product,
+            'product' => $product->load('variants'),
         ]]);
     }
 

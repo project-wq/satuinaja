@@ -79,7 +79,7 @@ class ProductController extends Controller
     {
         $this->authorize('view', $product);
 
-        return response()->json(['data' => $product->load('publishLogs.channel')]);
+        return response()->json(['data' => $product->load(['publishLogs.channel', 'variants'])]);
     }
 
     public function update(Request $request, Product $product): JsonResponse
