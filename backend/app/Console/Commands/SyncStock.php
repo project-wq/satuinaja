@@ -77,10 +77,9 @@ class SyncStock extends Command
                         'flap_at' => $flapAt ? now()->toISOString() : null,
                     ];
                     $channel->update(['product_hashes' => $hashes]);
-                } elseif (! $result['skipped'] ?? false) {
-                    // Gagal → jangan menandai flap, tapi catat waktu coba
-                    // terakhir agar log tidak spam.
-                    $this->line(sprintf('  └ retry berikutnya dalam 5 menit'));
+                } elseif (! ($result['skipped'] ?? false)) {
+                    // Gagal (bukan skip) → retry otomatis tiap 5 menit oleh scheduler.
+                    $this->line('  └ retry berikutnya dalam 5 menit');
                 }
             }
         }

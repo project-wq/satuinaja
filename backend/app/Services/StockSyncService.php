@@ -26,7 +26,15 @@ class StockSyncService
     ) {
     }
 
-    public function sync(Product $product): array
+    /**
+     * Push perubahan ke channel.
+     *
+     * @param  bool  $includeContent  kirim juga judul/harga/deskripsi
+     *                                (Shopee update_item menerima field ini).
+     *                                Dipakai command untuk anti-flap: konten
+     *                                ditahan bila masih dalam jendela edit.
+     */
+    public function sync(Product $product, bool $includeContent = true): array
     {
         $channels = Channel::where('merchant_id', $product->merchant_id)
             ->where('active', true)
@@ -36,7 +44,7 @@ class StockSyncService
         foreach ($channels as $channel) {
             $results[$channel->platform] = match ($channel->platform) {
                 'facebook' => $this->facebook($product, $channel),
-                'shopee' => $this->shopee($product, $channel),
+                'shopee' => $this->shopee($product, $channel, $includeContent),
                 default => ['ok' => false, 'skipped' => true, 'error' => 'Platform ini tidak mendukung update stok otomatis.'],
             };
         }
@@ -82,7 +90,7 @@ class StockSyncService
         }
     }
 
-    private function shopee(Product $product, Channel $channel): array
+    private function shopee(Product $product, Channel $channel, bool $includeContent = true): array
     {
         $creds = (array) $channel->credentials;
         $missing = array_values(array_filter(
@@ -116,7 +124,13 @@ class StockSyncService
                 // kolom itu menyimpan md5 perubahan, BUKAN external_id).
                 'item_id' => $this->externalIdOf($product, $channel),
                 'stock' => (int) $product->stock,
-            ]);
+            ] + ($includeContent ? [
+                // Konten: judul/harga/deskripsi ikut terkirim (update_item
+                // menerima field ini tanpa publish ulang).
+                'original_price' => (float) $product->price,
+                'item_name' => mb_substr($product->title, 0, 120),
+                'description' => (string) ($product->description ?? $product->title),
+            ] : []),
 
             if (! $res->successful()) {
                 return ['ok' => false, 'error' => data_get($res->json(), 'error', 'HTTP '.$res->status())];
