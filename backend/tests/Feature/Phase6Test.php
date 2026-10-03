@@ -90,7 +90,7 @@ class Phase6Test extends TestCase
         $user = $m->user;
         $p = $this->product($m, 20000);
 
-        $this->order($m, $p, 2);          // paid: total 20000*2+11%*40000+2000+5000 = 49400
+        $this->order($m, $p, 2);          // paid: total 20000*2 + 11%*40000 + 1000*2 + 5000 = 51400
         $this->order($m, $p, 1);          // paid
         $this->order($m, $p, 1, 'unpaid'); // belum dibayar -> tak dihitung omzet
 
@@ -104,8 +104,8 @@ class Phase6Test extends TestCase
         $this->assertSame(1, $res['summary']['orders_pending']);
         $this->assertSame(3, $res['summary']['items_sold']);
 
-        // omzet = order1 (49400) + order2 (20000+2200+1000+5000=28200) = 77600
-        $this->assertSame(77600, $res['summary']['revenue']);
+        // omzet = order1 qty2 (40000+4400+2000+5000=51400) + order2 qty1 (20000+2200+1000+5000=28200) = 79600
+        $this->assertSame(79600, $res['summary']['revenue']);
         // seller_net = (20000-500)*3 = 58500
         $this->assertSame(58500, $res['summary']['seller_net']);
 
@@ -125,7 +125,7 @@ class Phase6Test extends TestCase
         $res->assertOk();
         $this->assertStringContainsString('text/csv', $res->headers->get('Content-Type'));
 
-        $body = $res->streamedContent() ?: $res->getContent();
+        $body = $res->getContent();
         $this->assertStringContainsString('tanggal,order,omzet,pendapatan_bersih', $body);
     }
 
@@ -205,13 +205,13 @@ class Phase6Test extends TestCase
         Notification::create(['merchant_id' => $m->id, 'type' => 'x', 'title' => 'C']);
 
         $res = $this->actingAs($user)->getJson('/api/v1/notifications')->assertOk()->json();
-        $this->assertSame(6, $res['meta']['total']);
-        $this->assertSame(6, $res['meta']['unread']);
+        $this->assertSame(3, $res['meta']['total']);
+        $this->assertSame(3, $res['meta']['unread']);
 
         // baca satu
         $first = $res['data'][0]['id'];
         $this->actingAs($user)->putJson("/api/v1/notifications/{$first}/read")->assertOk();
-        $this->assertSame(5, Notification::where('merchant_id', $m->id)->whereNull('read_at')->count());
+        $this->assertSame(2, Notification::where('merchant_id', $m->id)->whereNull('read_at')->count());
 
         // read all
         $this->actingAs($user)->postJson('/api/v1/notifications/read-all')->assertOk();
@@ -255,7 +255,7 @@ class Phase6Test extends TestCase
             'decision' => 'approved',
         ])->assertOk();
 
-        $this->assertSame(0, SellerBalance::where('merchant_id', $m->id)->fresh()->balance);
+        $this->assertSame(0, SellerBalance::where('merchant_id', $m->id)->firstOrFail()->balance);
         $this->assertSame('approved', Refund::find($res['id'])->status);
         $this->assertDatabaseHas('balance_transactions', [
             'merchant_id' => $m->id, 'type' => 'refund_paid', 'amount' => -19500,
@@ -329,7 +329,7 @@ class Phase6Test extends TestCase
         ])->assertOk();
 
         // approve ulang via service -> tidak dobel tarik
-        app(BalanceService::class)->refundOrder($order->fresh());
+        app(BalanceService::class)->refundOrder($order);
         $this->assertSame(0, SellerBalance::where('merchant_id', $m->id)->first()->balance);
         $this->assertSame(1, \App\Models\BalanceTransaction::where('type', 'refund_paid')->count());
     }

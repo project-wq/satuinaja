@@ -66,7 +66,8 @@ class ReportService
                 COALESCE(SUM(total),0) as revenue,
                 COALESCE(SUM(seller_net),0) as seller_net')
             ->groupBy('d')
-            ->pluck(null, 'd');
+            ->get()
+            ->keyBy('d');
 
         $out = [];
         $cursor = $from->copy()->startOfDay();

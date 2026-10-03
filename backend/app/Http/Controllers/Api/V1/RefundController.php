@@ -79,6 +79,8 @@ class RefundController extends Controller
     /** Admin: daftar semua refund. */
     public function adminIndex(Request $request): JsonResponse
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'Hanya admin.');
+
         return response()->json(
             Refund::with('order:id,order_no,total,buyer_name', 'merchant:id,name,slug')
                 ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
@@ -89,6 +91,8 @@ class RefundController extends Controller
     /** Admin: setujui / tolak refund. */
     public function process(Request $request, Refund $refund): JsonResponse
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'Hanya admin.');
+
         $data = $request->validate([
             'decision' => ['required', 'in:approved,rejected'],
             'note' => ['nullable', 'string', 'max:255'],
