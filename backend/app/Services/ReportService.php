@@ -36,11 +36,13 @@ class ReportService
         $itemsSold = (int) OrderItem::whereIn('order_id', (clone $paid)->select('orders.id'))
             ->sum('qty');
 
+        $ordersAll = (int) (clone $base)->count();
+
         return [
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
             'orders_paid' => (int) $agg->orders,
-            'orders_all' => (int) (clone $base)->count(),
+            'orders_all' => $ordersAll,
             'orders_pending' => (int) (clone $base)->where('payment_status', 'unpaid')->count(),
             'revenue' => (int) $agg->revenue,           // total dibayar buyer
             'gross_sale' => (int) $agg->gross_sale,     // harga jual setelah diskon
@@ -51,6 +53,9 @@ class ReportService
             'seller_net' => (int) $agg->seller_net,     // pendapatan bersih seller
             'items_sold' => $itemsSold,
             'avg_order' => $agg->orders > 0 ? (int) round($agg->revenue / $agg->orders) : 0,
+            'conversion_rate' => $ordersAll > 0
+                ? round(((int) $agg->orders / $ordersAll) * 100, 1)
+                : 0,
         ];
     }
 

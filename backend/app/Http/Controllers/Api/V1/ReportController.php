@@ -27,12 +27,32 @@ class ReportController extends Controller
         $merchant = $request->user()->effectiveMerchant();
         [$from, $to] = $this->range($request);
 
-        return response()->json(['data' => [
+        $data = [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'summary' => $this->report->summary($merchant, $from, $to),
             'daily' => $this->report->daily($merchant, $from, $to),
             'top_products' => $this->report->topProducts($merchant, $from, $to),
-        ]]);
+        ];
+
+        // ?compare=prev — bandingkan dengan periode sebelumnya (panjang sama).
+        if ($request->string('compare')->toString() === 'prev') {
+            $days = $from->diffInDays($to) + 1;
+            $prevTo = $from->copy()->subSecond();
+            $prevFrom = $prevTo->copy()->subDays($days - 1)->startOfDay();
+            $prev = $this->report->summary($merchant, $prevFrom, $prevTo);
+            $cur = $data['summary'];
+            $data['previous'] = $prev;
+            $data['delta'] = [
+                'revenue' => $cur['revenue'] - $prev['revenue'],
+                'revenue_pct' => $prev['revenue'] > 0
+                    ? round((($cur['revenue'] - $prev['revenue']) / $prev['revenue']) * 100, 1)
+                    : ($cur['revenue'] > 0 ? 100.0 : 0.0),
+                'orders_paid' => $cur['orders_paid'] - $prev['orders_paid'],
+                'seller_net' => $cur['seller_net'] - $prev['seller_net'],
+            ];
+        }
+
+        return response()->json(['data' => $data]);
     }
 
     /** GET /reports/sales/export — unduh CSV laporan harian. */
