@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BalanceController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\ChannelController;
+use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\CheckoutController;
 use App\Http\Controllers\Api\V1\MarketplaceWebhookController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -58,6 +59,10 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
     // Fase 14: voucher publik (daftar tayang + cek kode).
     Route::get('vouchers/public', [VoucherController::class, 'publicList']);
     Route::post('vouchers/check', [VoucherController::class, 'check']);
+
+    // Fase 22: chat buyer (publik, verifikasi no. HP).
+    Route::get('orders/track/{orderNo}/messages', [ChatController::class, 'buyerIndex']);
+    Route::post('orders/track/{orderNo}/messages', [ChatController::class, 'buyerStore']);
 });
 
 // ---------- Webhook (signature-verified, tanpa auth) ----------
@@ -159,6 +164,11 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     Route::put('orders/{order}/cancel', [CheckoutController::class, 'cancel']);
     Route::post('orders/{order}/return', [CheckoutController::class, 'requestReturn']);
     Route::put('orders/{order}/return', [CheckoutController::class, 'processReturn']);
+
+    // Fase 22: chat seller per order + badge unread.
+    Route::get('orders/{order}/messages', [ChatController::class, 'sellerIndex']);
+    Route::post('orders/{order}/messages', [ChatController::class, 'sellerStore']);
+    Route::get('messages/unread', [ChatController::class, 'unread']);
 
     // Fase 14: voucher milik merchant (check dipakai publik, lihat grup publik).
     Route::apiResource('vouchers', VoucherController::class);

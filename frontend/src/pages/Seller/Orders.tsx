@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Order, type Paginated } from '../../services/api'
 import { rupiah } from '../../components/ShopHeader'
+import ChatBox from '../../components/ChatBox'
 
 /** Langkah alur berikutnya yang tersedia untuk seller, per status. */
 function nextActions(o: Order): { key: string; label: string; danger?: boolean }[] {
@@ -421,6 +422,9 @@ export default function Orders() {
                 </button>
               ))}
             </div>
+            {detail.fulfillment_status !== 'cancelled' && (
+              <ChatBox orderNo={detail.order_no} orderId={detail.id} mode="seller" />
+            )}
           </div>
         </div>
       )}

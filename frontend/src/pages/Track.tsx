@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Header from '../components/ShopHeader'
+import ChatBox from '../components/ChatBox'
 import { api } from '../services/api'
 
 type TrackEvent = {
@@ -145,6 +146,9 @@ export default function Track() {
                     Paket diterima? Beri ulasan ★
                   </Link>
                 </p>
+              )}
+              {order.fulfillment_status !== 'cancelled' && (
+                <ChatBox orderNo={order.order_no} mode="buyer" />
               )}
             </div>
           )}
