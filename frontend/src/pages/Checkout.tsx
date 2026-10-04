@@ -18,6 +18,21 @@ interface FeePreview {
   buyer_admin_fee: number
   shipping_cost: number
   total: number
+  voucher: { code: string; name: string; discount: number; free_shipping: boolean } | null
+  voucher_disallowed: string | null
+}
+
+interface PublicVoucher {
+  code: string
+  name: string
+  type: 'percent' | 'fixed'
+  value: number
+  min_spend: number
+  max_discount: number | null
+  free_shipping: boolean
+  scope: string
+  end_at: string | null
+  sisa: number | null
 }
 
 export default function Checkout() {
@@ -39,11 +54,13 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [fee, setFee] = useState<FeePreview | null>(null)
+  const [voucherCode, setVoucherCode] = useState('')
+  const [vouchers, setVouchers] = useState<PublicVoucher[]>([])
 
   const totalWeight = items.reduce((a, i) => a + i.weight * i.qty, 0)
   const sub = subtotal()
 
-  // Rincian biaya live dari server (fee 11% + admin + diskon) setiap isi berubah.
+  // Rincian biaya live dari server (fee 11% + admin + diskon + voucher) setiap isi berubah.
   useEffect(() => {
     let stale = false
     if (items.length === 0) return
@@ -52,6 +69,7 @@ export default function Checkout() {
         merchant_slug: shopSlug,
         items: items.map((i) => ({ product_id: i.productId, variant_id: i.variantId, qty: i.qty })),
         shipping_cost: selected?.cost ?? 0,
+        voucher_code: voucherCode || undefined,
       })
       .then((r) => {
         if (!stale) setFee(r.data)
@@ -62,7 +80,15 @@ export default function Checkout() {
     return () => {
       stale = true
     }
-  }, [items, shopSlug, selected?.cost])
+  }, [items, shopSlug, selected?.cost, voucherCode])
+
+  // Daftar voucher yang sedang tayang di toko ini.
+  useEffect(() => {
+    api
+      .get<{ data: PublicVoucher[] }>(`/vouchers/public?merchant_slug=${encodeURIComponent(shopSlug)}`)
+      .then((r) => setVouchers(r.data))
+      .catch(() => setVouchers([]))
+  }, [shopSlug])
 
   async function cekOngkir() {
     setLoadingCost(true)
@@ -105,6 +131,7 @@ export default function Checkout() {
         ...form,
         service: selected.service,
         shipping_cost: selected.cost,
+        voucher_code: voucherCode || undefined,
         items: items.map((i) => ({ product_id: i.productId, variant_id: i.variantId, qty: i.qty })),
       })
 
@@ -299,6 +326,12 @@ export default function Checkout() {
                 <span className="text-emerald-600">−{rupiah(fee.discount_total)}</span>
               </div>
             )}
+            {fee?.voucher && fee.voucher.discount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Voucher {fee.voucher.code}</span>
+                <span className="text-emerald-600">−{rupiah(fee.voucher.discount)}</span>
+              </div>
+            )}
             {fee && (
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Fee layanan (11%)</span>
@@ -311,6 +344,65 @@ export default function Checkout() {
                 <span>{fee.buyer_admin_fee > 0 ? rupiah(fee.buyer_admin_fee) : '—'}</span>
               </div>
             )}
+
+            {/* Voucher */}
+            <div className="pt-2 border-t border-slate-100 space-y-2">
+              <div className="flex gap-2">
+                <input
+                  value={voucherCode}
+                  onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                  placeholder="Kode voucher"
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
+                />
+                {voucherCode && (
+                  <button
+                    type="button"
+                    onClick={() => setVoucherCode('')}
+                    className="text-xs px-2 text-slate-400"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {fee?.voucher && (
+                <p className="text-xs text-emerald-600">
+                  ✓ {fee.voucher.name} — potongan {rupiah(fee.voucher.discount)}
+                  {fee.voucher.free_shipping && ' + gratis ongkir'}
+                </p>
+              )}
+              {fee?.voucher_disallowed && (
+                <p className="text-xs text-amber-600">⚠ {fee.voucher_disallowed}</p>
+              )}
+
+              {vouchers.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] text-slate-400">Voucher tersedia:</p>
+                  {vouchers.map((v) => (
+                    <button
+                      key={v.code}
+                      type="button"
+                      onClick={() => setVoucherCode(v.code)}
+                      className={`w-full text-left rounded-lg border px-2.5 py-1.5 text-xs ${
+                        voucherCode === v.code
+                          ? 'border-slate-900 bg-slate-50'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="font-mono font-semibold">{v.code}</span>
+                      <span className="text-slate-500">
+                        {' '}
+                        · {v.name} ·{' '}
+                        {v.type === 'percent' ? `${v.value}%` : rupiah(v.value)}
+                        {v.free_shipping && ' + ongkir'}
+                        {v.min_spend > 0 && ` (min ${rupiah(v.min_spend)})`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">Ongkir ({totalWeight} g)</span>
               <span>{selected ? rupiah(selected.cost) : '—'}</span>
