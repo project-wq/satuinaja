@@ -50,7 +50,7 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
     Route::get('orders/track/{orderNo}', [CheckoutController::class, 'track']);
 
     // Fase 14: voucher publik (daftar tayang + cek kode).
-    Route::get('vouchers', [VoucherController::class, 'publicList']);
+    Route::get('vouchers/public', [VoucherController::class, 'publicList']);
     Route::post('vouchers/check', [VoucherController::class, 'check']);
 });
 
@@ -131,9 +131,16 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     Route::get('orders/{order}', [CheckoutController::class, 'show']);
     Route::put('orders/{order}/ship', [CheckoutController::class, 'ship']);
 
-    // Fase 14: voucher milik merchant.
-    Route::apiResource('vouchers', VoucherController::class)->except(['check']);
-    Route::post('vouchers/check', [VoucherController::class, 'check']);
+    // Fase 15: alur pemenuhan order seller.
+    Route::put('orders/{order}/pack', [CheckoutController::class, 'pack']);
+    Route::put('orders/{order}/deliver', [CheckoutController::class, 'deliver']);
+    Route::put('orders/{order}/complete', [CheckoutController::class, 'complete']);
+    Route::put('orders/{order}/cancel', [CheckoutController::class, 'cancel']);
+    Route::post('orders/{order}/return', [CheckoutController::class, 'requestReturn']);
+    Route::put('orders/{order}/return', [CheckoutController::class, 'processReturn']);
+
+    // Fase 14: voucher milik merchant (check dipakai publik, lihat grup publik).
+    Route::apiResource('vouchers', VoucherController::class);
 
     // Fase 6: refund oleh seller
     Route::get('refunds', [RefundController::class, 'index']);

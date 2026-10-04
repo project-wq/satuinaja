@@ -274,6 +274,10 @@ class CheckoutController extends Controller
 
     /** Lacak status order publik via nomor order (storefront). */
     public function track(string $orderNo): JsonResponse
+    {
+        $order = Order::withoutGlobalScope('merchant')
+            ->where('order_no', $orderNo)
+            ->firstOrFail();
 
         return response()->json(['data' => [
             'order_no' => $order->order_no,
@@ -284,6 +288,181 @@ class CheckoutController extends Controller
             'total' => $order->total,
             'rincian' => $this->rincian($order),
         ]]);
+    }
+
+    // ================= FASE 15: alur pemenuhan order =================
+
+    /** Seller: tandai pesanan dikemas (pending → packed). */
+    public function pack(Request $request, Order $order): JsonResponse
+    {
+        $this->authorizeOrder($request, $order);
+        abort_unless($order->fulfillment_status === 'pending', 422, 'Hanya order pending yang bisa dikemas.');
+        abort_unless($order->payment_status === 'paid', 422, 'Order belum dibayar.');
+
+        $order->update(['fulfillment_status' => 'packed', 'packed_at' => now()]);
+        Audit::record('order.packed', $order);
+        $this->notif->push($order->merchant_id, 'order.packed', 'Order dikemas', "Order {$order->order_no} siap dikirim.", '/seller/orders');
+
+        return response()->json(['data' => $order->fresh()]);
+    }
+
+    /** Seller: tandai pesanan tiba (shipped → delivered) — atau buyer konfirmasi via track token. */
+    public function deliver(Request $request, Order $order): JsonResponse
+    {
+        $this->authorizeOrder($request, $order);
+        abort_unless(in_array($order->fulfillment_status, ['shipped', 'packed'], true), 422, 'Order belum dalam pengiriman.');
+        abort_unless($order->payment_status === 'paid', 422, 'Order belum dibayar.');
+
+        $order->update(['fulfillment_status' => 'delivered', 'delivered_at' => now()]);
+        Audit::record('order.delivered', $order);
+
+        return response()->json(['data' => $order->fresh()]);
+    }
+
+    /** Seller: tandai pesanan selesai (delivered → completed) → cairkan saldo. */
+    public function complete(Request $request, Order $order): JsonResponse
+    {
+        $this->authorizeOrder($request, $order);
+        abort_unless($order->fulfillment_status === 'delivered', 422, 'Order belum diterima pembeli.');
+        abort_unless($order->completed_at === null, 422, 'Order sudah selesai.');
+
+        DB::transaction(function () use ($order) {
+            $order->update(['fulfillment_status' => 'completed', 'completed_at' => now()]);
+            // Saldo seller cair setelah order selesai (net = seller_net).
+            app(\App\Services\BalanceService::class)->creditOrder($order);
+        });
+        Audit::record('order.completed', $order);
+
+        return response()->json(['data' => $order->fresh()]);
+    }
+
+    /** Seller/buyer/admin: batalkan order (belum dikirim). Otomatis kembalikan stok. */
+    public function cancel(Request $request, Order $order): JsonResponse
+    {
+        $user = $request->user();
+        $isAdmin = $user->role === 'admin';
+        if (! $isAdmin) {
+            $this->authorizeOrder($request, $order);
+        }
+
+        abort_unless(in_array($order->fulfillment_status, ['pending', 'packed'], true), 422, 'Order sudah dikirim, gunakan retur.');
+
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:255'],
+            'by' => ['nullable', 'in:buyer,seller,admin'],
+        ]);
+
+        DB::transaction(function () use ($order, $data, $isAdmin, $user) {
+            // Kembalikan stok item (produk + varian).
+            foreach ($order->items as $line) {
+                if ($line->variant_id) {
+                    \App\Models\ProductVariant::withoutGlobalScope('merchant')
+                        ->whereKey($line->variant_id)->increment('stock', $line->qty);
+                }
+                Product::withoutGlobalScope('merchant')
+                    ->whereKey($line->product_id)->increment('stock', $line->qty);
+            }
+
+            // Kembalikan kuota voucher bila ada.
+            if ($order->voucher_id && $order->voucher_discount > 0) {
+                $v = Voucher::withoutGlobalScope('merchant')->whereKey($order->voucher_id)->first();
+                if ($v) {
+                    $v->decrement('used');
+                    VoucherRedemption::where('voucher_id', $v->id)->where('order_id', $order->id)->delete();
+                }
+            }
+
+            $order->update([
+                'fulfillment_status' => 'cancelled',
+                'cancelled_at' => now(),
+                'cancelled_by' => $data['by'] ?? ($isAdmin ? 'admin' : 'seller'),
+                'cancel_reason' => $data['reason'] ?? null,
+            ]);
+        });
+        Audit::record('order.cancelled', $order, ['by' => $order->cancelled_by]);
+
+        return response()->json(['data' => $order->fresh()]);
+    }
+
+    /** Buyer/seller: ajukan retur (setelah dikirim/diterima). */
+    public function requestReturn(Request $request, Order $order): JsonResponse
+    {
+        $this->authorizeOrder($request, $order);
+        abort_unless(in_array($order->fulfillment_status, ['shipped', 'delivered', 'completed'], true), 422, 'Order belum dikirim.');
+        abort_unless(in_array($order->return_status, [null, 'rejected'], true), 422, 'Retur sudah diajukan.');
+
+        $data = $request->validate(['reason' => ['required', 'string', 'max:500']]);
+
+        $order->update([
+            'return_status' => 'requested',
+            'return_requested_at' => now(),
+            'return_reason' => $data['reason'],
+        ]);
+        Audit::record('order.return_requested', $order);
+        $this->notif->push($order->merchant_id, 'order.return', 'Pengajuan retur', "Order {$order->order_no} mengajukan retur.", '/seller/orders');
+
+        return response()->json(['data' => $order->fresh()]);
+    }
+
+    /** Seller/admin: putuskan retur (approve/reject). Approve → kembalikan stok + potong saldo. */
+    public function processReturn(Request $request, Order $order): JsonResponse
+    {
+        $user = $request->user();
+        if ($user->role !== 'admin') {
+            $this->authorizeOrder($request, $order);
+        }
+        abort_unless($order->return_status === 'requested', 422, 'Tidak ada pengajuan retur aktif.');
+
+        $data = $request->validate([
+            'decision' => ['required', 'in:approved,rejected'],
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        DB::transaction(function () use ($order, $data) {
+            if ($data['decision'] === 'approved') {
+                foreach ($order->items as $line) {
+                    if ($line->variant_id) {
+                        \App\Models\ProductVariant::withoutGlobalScope('merchant')
+                            ->whereKey($line->variant_id)->increment('stock', $line->qty);
+                    }
+                    Product::withoutGlobalScope('merchant')
+                        ->whereKey($line->product_id)->increment('stock', $line->qty);
+                }
+                $order->update([
+                    'return_status' => 'approved',
+                    'seller_note' => $data['note'] ?? null,
+                    'fulfillment_status' => 'returned',
+                ]);
+            } else {
+                $order->update(['return_status' => 'rejected', 'seller_note' => $data['note'] ?? null]);
+            }
+        });
+        Audit::record('order.return_'.$data['decision'], $order);
+
+        return response()->json(['data' => $order->fresh()]);
+    }
+
+    /** Admin: daftar semua order lintas merchant dengan filter. */
+    public function adminIndex(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->role === 'admin', 403);
+
+        $orders = Order::withoutGlobalScope('merchant')
+            ->with('items')
+            ->when($request->string('payment_status')->toString(), fn ($q, $s) => $q->where('payment_status', $s))
+            ->when($request->string('fulfillment_status')->toString(), fn ($q, $s) => $q->where('fulfillment_status', $s))
+            ->when($request->string('return_status')->toString(), fn ($q, $s) => $q->where('return_status', $s))
+            ->when($request->integer('merchant_id'), fn ($q, $m) => $q->where('merchant_id', $m))
+            ->latest()
+            ->paginate(30);
+
+        return response()->json($orders);
+    }
+
+    /** Guard kepemilikan order oleh merchant login. */
+    private function authorizeOrder(Request $request, Order $order): void
+    {
+        abort_unless($order->merchant_id === $request->user()->merchant?->id, 403);
     }
 
     // ---- helper ----
