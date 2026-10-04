@@ -157,7 +157,36 @@ export interface Order {
   tracking_no: string | null
   payment_status: string
   fulfillment_status: string
+  voucher_code: string | null
+  voucher_discount: number
+  shipping_discount: number
+  cancel_reason: string | null
+  cancelled_by: string | null
+  return_status: string | null
+  return_reason: string | null
+  seller_note: string | null
   items?: OrderItem[]
+}
+
+export interface Voucher {
+  id: number
+  scope: 'product' | 'shop' | 'platform'
+  merchant_id: number | null
+  product_id: number | null
+  code: string
+  name: string
+  type: 'percent' | 'fixed'
+  value: number
+  min_spend: number
+  max_discount: number | null
+  quota: number | null
+  used: number
+  max_per_buyer: number
+  free_shipping: boolean
+  active: boolean
+  start_at: string | null
+  end_at: string | null
+  product?: { id: number; title: string } | null
 }
 
 export interface OrderItem {

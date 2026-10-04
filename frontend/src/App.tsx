@@ -10,6 +10,7 @@ import Channels from './pages/Seller/Channels'
 import Orders from './pages/Seller/Orders'
 import Billing from './pages/Seller/Billing'
 import Balance from './pages/Seller/Balance'
+import Vouchers from './pages/Seller/Vouchers'
 import Admin from './pages/Seller/Admin'
 import Shop from './pages/Shop'
 import ProductDetail from './pages/ProductDetail'
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="products" element={<Products />} />
         <Route path="channels" element={<Channels />} />
         <Route path="orders" element={<Orders />} />
+        <Route path="vouchers" element={<Vouchers />} />
         <Route path="billing" element={<Billing />} />
         <Route path="balance" element={<Balance />} />
         <Route path="admin" element={<Admin />} />
