@@ -24,6 +24,7 @@ class CheckoutController extends Controller
         private \App\Services\NotificationService $notif,
         private \App\Services\PromotionService $promo,
         private \App\Services\BiteshipService $biteship,
+        private \App\Services\OrderTrackingService $tracking,
     ) {
     }
 
@@ -407,14 +408,27 @@ class CheckoutController extends Controller
             ->where('order_no', $orderNo)
             ->firstOrFail();
 
+        $fresh = $order->fresh();
+
+        // Fase 17: tracking otomatis — sinkronkan on-demand saat buyer cek halaman ini.
+        if ($order->biteship_order_id) {
+            try {
+                $this->tracking->sync($fresh);
+                $fresh = $fresh->fresh();
+            } catch (\Throwable $e) {
+                // Timeline lama tetap tampil walau sync gagal.
+            }
+        }
+
         return response()->json(['data' => [
-            'order_no' => $order->order_no,
-            'payment_status' => $order->payment_status,
-            'fulfillment_status' => $order->fulfillment_status,
-            'tracking_no' => $order->tracking_no,
-            'courier' => $order->courier,
-            'total' => $order->total,
-            'rincian' => $this->rincian($order),
+            'order_no' => $fresh->order_no,
+            'payment_status' => $fresh->payment_status,
+            'fulfillment_status' => $fresh->fulfillment_status,
+            'tracking_no' => $fresh->tracking_no,
+            'courier' => $fresh->courier,
+            'total' => $fresh->total,
+            'timeline' => $this->tracking->history($fresh),
+            'rincian' => $this->rincian($fresh),
         ]]);
     }
 
