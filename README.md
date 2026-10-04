@@ -53,7 +53,7 @@ Auth memakai **Laravel Sanctum cookie HttpOnly** (bukan token di localStorage), 
 
 | Perangkat | Versi | Kegunaan |
 |---|---|---|
-| **PHP** | 8.3 atau lebih baru (disarankan 8.4) | menjalankan backend Laravel |
+| **PHP** | **8.4** atau lebih baru (minimal 8.4.1 — lihat catatan di bawah) | menjalankan backend Laravel |
 | **Ekstensi PHP** | `mbstring`, `pdo_sqlite` (atau `pdo_mysql`), `openssl`, `curl`, `json`, `bcmath`, `fileinfo`, `gd`, `zip` | Laravel + enkripsi + upload gambar |
 | **Composer** | 2.x | memasang paket PHP |
 | **Node.js** | 20 atau lebih baru (disarankan 22) | membangun frontend |
@@ -65,7 +65,7 @@ Opsional tapi disarankan: **SQLite 3** (default, tanpa server) atau **MySQL 8 / 
 ### Cek cepat
 
 ```bash
-php -v              # harus >= 8.3
+php -v              # harus >= 8.4.1 (composer.lock mengunci symfony 8.1 yang butuh >=8.4.1)
 php -m              # cek mbstring, pdo_sqlite, openssl, curl, gd, zip ada
 composer -V
 node -v             # harus >= 20
@@ -307,7 +307,7 @@ crontab -e
 * * * * * cd /var/www/satuinaja/backend && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-**Ringkas:** yang harus ada di server = PHP 8.3+, Composer, Node 20+ (hanya untuk build), web server (Nginx/Apache), database (MySQL/SQLite), Supervisor untuk queue. Frontend bisa dititipkan ke Vercel/Netlify gratis; backend harus server sendiri karena butuh PHP.
+**Ringkas:** yang harus ada di server = PHP 8.4.1+, Composer, Node 20+ (hanya untuk build), web server (Nginx/Apache), database (MySQL/SQLite), Supervisor untuk queue. Frontend bisa dititipkan ke Vercel/Netlify gratis; backend harus server sendiri karena butuh PHP.
 
 ---
 
@@ -529,6 +529,8 @@ crontab -e
 
 **`composer install` gagal / koneksi diblokir** — proxy mengganggu. Jalankan `env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy composer install`.
 
+**`composer install`: "Your lock file does not contain a compatible set of packages"** — PHP lokal lebih lama dari yang dikunci lock file (butuh ≥8.4.1). Upgrade PHP ke 8.4.1+, atau (kalau terpaksa) `composer update` untuk menurunkan versi agar cocok — tapi ini membuat versi dependency beda dari server. Upgrade PHP lebih disarankan.
+
 **Halaman putih / JSON kosong** — cek `backend/storage/logs/laravel.log`. Biasanya `APP_KEY` kosong (`php artisan key:generate`).
 
 **`419 Page Expired` atau tidak bisa login** — domain frontend belum terdaftar. Pastikan `SANCTUM_STATEFUL_DOMAINS` memuat domain frontend **dengan port** (mis. `localhost:5173`), dan `FRONTEND_URLS` memuat origin lengkapnya.
@@ -581,6 +583,8 @@ crontab -e
 - [x] **Fase 9** — fix sync stok: `item_id` update_item sekarang dari `PublishLog.external_id` (bukan `product_hashes` yang isinya md5), cast `product_hashes` array + fillable
 - [x] **Fase 10** — sync konten otomatis saat produk diedit: `update_item` kirim judul/harga/deskripsi + stok, hash deteksi perubahan (judul/harga/stok/deskripsi/gambar/berat), anti-flap 10 menit (stok tetap push, konten ditahan saat edit beruntun)
 - [x] **Fase 11** — multi-varian produk (ukuran/warna): tabel `product_variants`, stok & harga per varian (`products.stock` = agregat), checkout/preview per varian (lock + validasi stok varian), selector varian di storefront, editor varian di panel seller
+- [x] **Fase 12** — varian tersinkron ke Shopee: `init_tier_variation` saat publish (1 tier, opsi = nama varian, `model_id` disimpan di `product_variants.shopee_model_id`), push stok & harga per-model (`update_stock`/`update_price` dengan `stock_list`/`price_list`), pull per-varian via `get_model_list` (pemetaan `model_id`/`model_sku`, lalu re-agregat `products.stock`)
+- [x] **Fase 13** — order marketplace bervarian: webhook Shopee memetakan `model_id`/`model_sku` ke varian lokal, `order_items.variant_id`, harga & fee dihitung dari harga varian, potong stok varian + agregat produk, tetap idempotent per `external_order_id`
 
 ---
 
