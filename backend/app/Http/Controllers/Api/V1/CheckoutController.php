@@ -253,12 +253,12 @@ class CheckoutController extends Controller
 
     public function show(Request $request, Order $order): JsonResponse
     {
-        abort_unless($order->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($order->merchant_id === $request->user()->effectiveMerchant()->id, 403);
 
         // sender: data pengirim untuk cetak label resi (alamat toko).
         return response()->json([
             'data' => $order->load('items'),
-            'sender' => $request->user()->merchant,
+            'sender' => $request->user()->effectiveMerchant(),
         ]);
     }
 
@@ -269,7 +269,7 @@ class CheckoutController extends Controller
      */
     public function ship(Request $request, Order $order): JsonResponse
     {
-        abort_unless($order->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($order->merchant_id === $request->user()->effectiveMerchant()->id, 403);
 
         $data = $request->validate([
             'tracking_no' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9\-]+$/'],
@@ -607,7 +607,7 @@ class CheckoutController extends Controller
         if ($request->user()->role === 'admin') {
             return;
         }
-        abort_unless($order->merchant_id === $request->user()->merchant?->id, 403);
+        abort_unless($order->merchant_id === $request->user()->effectiveMerchant()?->id, 403);
     }
 
     // ---- helper ----

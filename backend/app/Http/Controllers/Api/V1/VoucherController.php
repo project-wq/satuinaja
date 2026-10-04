@@ -28,7 +28,7 @@ class VoucherController extends Controller
             ->with('product:id,title')
             ->when($request->string('scope')->toString(), fn ($q, $s) => $q->where('scope', $s))
             ->when($request->boolean('active_only'), fn ($q) => $q->where('active', true))
-            ->when(! $isAdmin, fn ($q) => $q->where('merchant_id', $request->user()->merchant?->id))
+            ->when(! $isAdmin, fn ($q) => $q->where('merchant_id', $request->user()->effectiveMerchant()?->id))
             ->latest();
 
         return response()->json($query->paginate(20));
@@ -36,7 +36,7 @@ class VoucherController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
         $data = $this->validateData($request, $merchant, null);
 
         // Voucher platform dibuat admin (merchant_id = null, berlaku lintas toko).
@@ -57,7 +57,7 @@ class VoucherController extends Controller
     public function update(Request $request, Voucher $voucher): JsonResponse
     {
         $this->authorizeVoucher($request, $voucher);
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         // Update parsial: field yang tak dikirim diisi nilai lama.
         $request->merge(array_merge(

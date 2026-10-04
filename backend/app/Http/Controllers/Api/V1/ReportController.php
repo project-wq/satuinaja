@@ -24,7 +24,7 @@ class ReportController extends Controller
      */
     public function sales(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
         [$from, $to] = $this->range($request);
 
         return response()->json(['data' => [
@@ -38,7 +38,7 @@ class ReportController extends Controller
     /** GET /reports/sales/export — unduh CSV laporan harian. */
     public function export(Request $request)
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
         [$from, $to] = $this->range($request);
 
         $csv = $this->report->dailyCsv($merchant, $from, $to);

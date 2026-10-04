@@ -21,7 +21,7 @@ class ChannelController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $channels = $request->user()->merchant->channels()->latest()->get()
+        $channels = $request->user()->effectiveMerchant()->channels()->latest()->get()
             ->map(fn (Channel $c) => $this->present($c));
 
         return response()->json(['data' => $channels]);
@@ -42,7 +42,7 @@ class ChannelController extends Controller
 
         $channel = Channel::updateOrCreate(
             [
-                'merchant_id' => $request->user()->merchant->id,
+                'merchant_id' => $request->user()->effectiveMerchant()->id,
                 'platform' => $data['platform'],
             ],
             [
@@ -63,7 +63,7 @@ class ChannelController extends Controller
 
     public function update(Request $request, Channel $channel): JsonResponse
     {
-        abort_unless($channel->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($channel->merchant_id === $request->user()->effectiveMerchant()->id, 403);
 
         $data = $request->validate([
             'label' => ['nullable', 'string', 'max:80'],
@@ -80,7 +80,7 @@ class ChannelController extends Controller
         }
         if (array_key_exists('active', $data)) {
             // Batas plan: channel aktif per merchant.
-            $merchant = $request->user()->merchant;
+            $merchant = $request->user()->effectiveMerchant();
         $limits = BillingController::limits($merchant);
             if ($data['active'] && ! $channel->active
                 && $limits['max_channels'] !== null
@@ -101,7 +101,7 @@ class ChannelController extends Controller
 
     public function destroy(Request $request, Channel $channel): JsonResponse
     {
-        abort_unless($channel->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($channel->merchant_id === $request->user()->effectiveMerchant()->id, 403);
 
         Audit::record('channel.deleted', $channel, ['platform' => $channel->platform]);
         $channel->delete();
@@ -114,7 +114,7 @@ class ChannelController extends Controller
      */
     public function verify(Request $request, Channel $channel): JsonResponse
     {
-        abort_unless($channel->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($channel->merchant_id === $request->user()->effectiveMerchant()->id, 403);
 
         $result = $this->publisher->verify($channel);
 
@@ -128,7 +128,7 @@ class ChannelController extends Controller
      */
     public function logs(Request $request, Channel $channel): JsonResponse
     {
-        abort_unless($channel->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($channel->merchant_id === $request->user()->effectiveMerchant()->id, 403);
 
         $logs = PublishLog::with('product:id,title,slug')
             ->where('channel_id', $channel->id)

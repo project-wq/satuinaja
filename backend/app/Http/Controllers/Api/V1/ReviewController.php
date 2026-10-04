@@ -73,7 +73,7 @@ class ReviewController extends Controller
     /** Daftar ulasan panel seller. */
     public function index(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
         abort_unless($merchant, 403);
 
         $page = Review::where('merchant_id', $merchant->id)
@@ -87,7 +87,7 @@ class ReviewController extends Controller
     /** Balas ulasan — seller pemilik toko. */
     public function reply(Request $request, Review $review): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
         abort_unless($merchant && $review->merchant_id === $merchant->id, 403);
 
         $data = $request->validate([

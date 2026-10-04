@@ -26,7 +26,7 @@ class BillingController extends Controller
     /** Daftar plan + plan saat ini + batas yang berlaku. */
     public function index(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         return response()->json([
             'data' => [
@@ -59,7 +59,7 @@ class BillingController extends Controller
         abort_unless($plan && $plan->active, 422, 'Plan tak ada.');
         abort_unless($plan->price_monthly > 0, 422, 'Plan ini gratis — sudah aktif.');
 
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         // Kalau sudah punya langganan aktif untuk plan ini, tak perlu bayar 2 kali.
         $existing = Subscription::where('merchant_id', $merchant->id)

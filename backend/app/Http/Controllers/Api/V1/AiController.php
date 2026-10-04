@@ -36,7 +36,7 @@ class AiController extends Controller
                 'price' => $data['price'] ?? 0,
             ];
 
-        if ($product instanceof Product && $product->merchant_id !== $request->user()->merchant->id) {
+        if ($product instanceof Product && $product->merchant_id !== $request->user()->effectiveMerchant()->id) {
             abort(403);
         }
 
@@ -61,13 +61,13 @@ class AiController extends Controller
         ]);
 
         $product = Product::findOrFail($data['product_id']);
-        abort_unless($product->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($product->merchant_id === $request->user()->effectiveMerchant()->id, 403);
 
         $channel = isset($data['channel_id'])
             ? Channel::find($data['channel_id'])
             : null;
 
-        abort_if($channel && $channel->merchant_id !== $request->user()->merchant->id, 403);
+        abort_if($channel && $channel->merchant_id !== $request->user()->effectiveMerchant()->id, 403);
 
         $price = 'Rp'.number_format((float) $product->price, 0, ',', '.');
 

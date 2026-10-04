@@ -23,7 +23,7 @@ class BalanceController extends Controller
     /** Saldo terkini + ringkasan. */
     public function index(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
         $bal = $this->balance->for($merchant);
 
         return response()->json(['data' => [
@@ -37,7 +37,7 @@ class BalanceController extends Controller
     /** Riwayat mutasi saldo. */
     public function transactions(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         return response()->json(
             BalanceTransaction::where('merchant_id', $merchant->id)
@@ -56,7 +56,7 @@ class BalanceController extends Controller
             'bank_account_holder' => ['required', 'string', 'max:128'],
         ]);
 
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         try {
             $wd = $this->balance->requestWithdraw($merchant, $data);
@@ -78,7 +78,7 @@ class BalanceController extends Controller
     /** Riwayat penarikan milik seller ini. */
     public function withdrawals(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         return response()->json([
             'data' => Withdrawal::where('merchant_id', $merchant->id)

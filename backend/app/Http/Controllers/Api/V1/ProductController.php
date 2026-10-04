@@ -28,7 +28,7 @@ class ProductController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         // Batas plan: max produk per merchant.
         $limits = BillingController::limits($merchant);
@@ -126,7 +126,7 @@ class ProductController extends Controller
             'channel_ids.*' => ['integer', 'exists:channels,id'],
         ]);
 
-        $channels = $request->user()->merchant->channels()
+        $channels = $request->user()->effectiveMerchant()->channels()
             ->where('active', true)
             ->when($data['channel_ids'] ?? null, fn ($q, $ids) => $q->whereIn('id', $ids))
             ->get();

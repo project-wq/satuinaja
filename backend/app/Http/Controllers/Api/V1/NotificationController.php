@@ -20,7 +20,7 @@ class NotificationController extends Controller
     /** Daftar notifikasi + jumlah belum dibaca. */
     public function index(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         $items = Notification::where('merchant_id', $merchant->id)
             ->when($request->boolean('unread_only'), fn ($q) => $q->whereNull('read_at'))
@@ -41,7 +41,7 @@ class NotificationController extends Controller
     /** Tandai satu notifikasi sudah dibaca. */
     public function read(Request $request, Notification $notification): JsonResponse
     {
-        abort_unless($notification->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($notification->merchant_id === $request->user()->effectiveMerchant()->id, 403);
         $notification->update(['read_at' => now()]);
 
         return response()->json(['data' => $notification->fresh()]);
@@ -50,7 +50,7 @@ class NotificationController extends Controller
     /** Tandai semua notifikasi sudah dibaca. */
     public function readAll(Request $request): JsonResponse
     {
-        $count = $this->notif->markRead($request->user()->merchant);
+        $count = $this->notif->markRead($request->user()->effectiveMerchant());
 
         return response()->json(['data' => ['marked' => $count]]);
     }
@@ -58,7 +58,7 @@ class NotificationController extends Controller
     /** Hapus notifikasi. */
     public function destroy(Request $request, Notification $notification): JsonResponse
     {
-        abort_unless($notification->merchant_id === $request->user()->merchant->id, 403);
+        abort_unless($notification->merchant_id === $request->user()->effectiveMerchant()->id, 403);
         $notification->delete();
 
         return response()->json(['message' => 'Dihapus.']);

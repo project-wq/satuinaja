@@ -24,7 +24,7 @@ class RefundController extends Controller
     /** Seller: daftar refund milik merchant. */
     public function index(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         return response()->json(
             Refund::where('merchant_id', $merchant->id)
@@ -41,7 +41,7 @@ class RefundController extends Controller
             'reason' => ['required', 'string', 'max:255'],
         ]);
 
-        $merchant = $request->user()->merchant;
+        $merchant = $request->user()->effectiveMerchant();
 
         $order = Order::withoutGlobalScope('merchant')
             ->where('merchant_id', $merchant->id)
