@@ -72,6 +72,8 @@ export interface Merchant {
   id: number
   name: string
   slug: string
+  kyc_status?: 'pending' | 'approved' | 'rejected'
+  postal_code?: string | null
 }
 
 export interface User {
