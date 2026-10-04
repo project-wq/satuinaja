@@ -7,6 +7,7 @@ use App\Models\Merchant;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Voucher;
+use App\Models\Voucher;
 use App\Services\FeeService;
 use App\Services\MidtransService;
 use App\Support\Audit;
@@ -146,6 +147,30 @@ class CheckoutController extends Controller
                 $product->decrement('stock', $item['qty']);
             }
 
+            // Fase 14: voucher (dalam transaksi; redeem + kurangi kuota).
+            $voucher = null;
+            $voucherDiscount = 0;
+            $shippingDiscount = 0;
+            $shippingCost = $data['shipping_cost'];
+
+            if (! empty($data['voucher_code'])) {
+                $voucher = $this->promo->findUsable(
+                    (string) $data['voucher_code'],
+                    $merchant,
+                    array_column($lines, 'product_id'),
+                );
+                if ($voucher) {
+                    $vr = $this->promo->apply($voucher, $lines, $shippingCost);
+                    if (! $vr['error']) {
+                        $voucherDiscount = (int) $vr['discount'];
+                        $shippingDiscount = (int) $vr['shipping_discount'];
+                        if ($vr['free_shipping']) {
+                            $shippingCost = 0;
+                        }
+                    }
+                }
+            }
+
             $order = Order::create([
                 'merchant_id' => $merchant->id,
                 'order_no' => $this->midtrans->generateOrderNo(),
@@ -156,16 +181,20 @@ class CheckoutController extends Controller
                 'destination_city_id' => $data['destination_city_id'],
                 'courier' => $data['courier'],
                 'service' => $data['service'],
-                'shipping_cost' => $data['shipping_cost'],
+                'shipping_cost' => $shippingCost,
                 'subtotal' => $subtotal,
                 'discount_total' => $discountTotal,
                 'subtotal_sale' => $subtotalSale,
                 'buyer_fee' => $buyerFeeTotal,
                 'buyer_admin_fee' => $buyerAdminTotal,
                 'seller_net' => $sellerNetTotal,
-                'total' => $subtotalSale + $buyerFeeTotal + $buyerAdminTotal + $data['shipping_cost'],
+                'total' => $subtotalSale + $buyerFeeTotal + $buyerAdminTotal + $shippingCost - $voucherDiscount,
                 'payment_status' => 'unpaid',
                 'fulfillment_status' => 'pending',
+                'voucher_id' => $voucher?->id,
+                'voucher_discount' => $voucherDiscount,
+                'voucher_code' => $voucher?->code,
+                'shipping_discount' => $shippingDiscount,
             ]);
 
             $order->items()->createMany($lines);
