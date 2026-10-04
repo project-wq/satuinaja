@@ -11,6 +11,7 @@ import Orders from './pages/Seller/Orders'
 import Billing from './pages/Seller/Billing'
 import Balance from './pages/Seller/Balance'
 import Vouchers from './pages/Seller/Vouchers'
+import Reports from './pages/Seller/Reports'
 import Admin from './pages/Seller/Admin'
 import Shop from './pages/Shop'
 import ProductDetail from './pages/ProductDetail'
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="channels" element={<Channels />} />
         <Route path="orders" element={<Orders />} />
         <Route path="vouchers" element={<Vouchers />} />
+        <Route path="reports" element={<Reports />} />
         <Route path="billing" element={<Billing />} />
         <Route path="balance" element={<Balance />} />
         <Route path="admin" element={<Admin />} />

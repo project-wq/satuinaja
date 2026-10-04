@@ -47,6 +47,9 @@ export default function SellerLayout() {
             <NavLink to="/seller/vouchers" className={link}>
               Voucher
             </NavLink>
+            <NavLink to="/seller/reports" className={link}>
+              Laporan
+            </NavLink>
             <NavLink to="/seller/billing" className={link}>
               Langganan
             </NavLink>
