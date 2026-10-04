@@ -484,6 +484,13 @@ backend/
 │       ├── ResiService.php        lacak resi
 │       ├── MidtransService.php    payment + Snap langganan
 │       ├── StockSyncService.php   sinkron stok/harga ke channel
+│       ├── BiteshipService.php    auto-resi + tracking
+│       ├── OrderTrackingService.php  cek status order + Biteship courierTracking
+│       ├── PromotionService.php   voucher: validasi, apply, redeem, clawback
+│       ├── FeeService.php         hitung fee pembeli/admin, net seller
+│       ├── NotificationService.php  notif in-app + badge unread
+│       ├── ReportService.php      agregasi laporan + CSV export
+│       ├── StockAlertService.php  restock alert + auto-hold habis
 │       └── AiCaptionService.php   caption otomatis
 ├── database/migrations/           skema tabel
 ├── routes/api.php                 semua endpoint /api/v1
@@ -491,9 +498,9 @@ backend/
 
 frontend/src/
 ├── pages/                         Shop, ProductDetail, Checkout, Track, Login, Register
-├── pages/Seller/                  Dashboard, Products, Channels, Orders,
-│                                  Billing (paket), Admin
-├── components/                    SellerLayout, ShopHeader
+├── pages/Seller/                  Dashboard, Products, Channels, Orders, Vouchers,
+│                                  Billing (paket), Reviews, Staff, Reports, Admin
+├── components/                    SellerLayout, ShopHeader, ChatBox
 ├── services/api.ts                pembungkus fetch (cookie session)
 └── store.ts                       state auth + keranjang
 ```
@@ -585,6 +592,16 @@ crontab -e
 - [x] **Fase 11** — multi-varian produk (ukuran/warna): tabel `product_variants`, stok & harga per varian (`products.stock` = agregat), checkout/preview per varian (lock + validasi stok varian), selector varian di storefront, editor varian di panel seller
 - [x] **Fase 12** — varian tersinkron ke Shopee: `init_tier_variation` saat publish (1 tier, opsi = nama varian, `model_id` disimpan di `product_variants.shopee_model_id`), push stok & harga per-model (`update_stock`/`update_price` dengan `stock_list`/`price_list`), pull per-varian via `get_model_list` (pemetaan `model_id`/`model_sku`, lalu re-agregat `products.stock`)
 - [x] **Fase 13** — order marketplace bervarian: webhook Shopee memetakan `model_id`/`model_sku` ke varian lokal, `order_items.variant_id`, harga & fee dihitung dari harga varian, potong stok varian + agregat produk, tetap idempotent per `external_order_id`
+- [x] **Fase 14** — voucher diskon & free ongkir: tabel `vouchers` (tipe `percentage`/`fixed`/`free_shipping`, batas pemakaian + per-pembeli), `voucher_redemptions` (tracking pemakaian + buyer_phone), terapkan di preview checkout, notif sisa kuota seller, validasi + clawback saat cancel/retur
+- [x] **Fase 15** — voucher marketplace publik: flag `is_public_marketplace`, endpoint `/vouchers/public` (tabel promo) + `POST /vouchers/check` (verifikasi kode), buyer claim tanpa login via `buyer_phone`, seller lihat statistik pemakaian per kode
+- [x] **Fase 16** — Biteship integrasi lengkap: auto-generate AWB (`POST /orders/:id/ship` tanpa body → API Biteship `order` → resi + update tracking_no), KYC seller (`kyc` tabel: NIK/alamat pickup/foto KTP, admin approve/reject, seller tdk aktif sampai KYC approved), tracking realtime Biteship API (`courierTracking`)
+- [x] **Fase 17** — halaman publik lacak pesanan: `/track` input order_no + buyer_phone, timeline status + AWB, tombol chat seller (jika `delivered`), poll Biteship 10 dtk (saat `shipped`)
+- [x] **Fase 18** — review & rating buyer: tabel `reviews` (order_id, rating 1-5, comment, reply_text seller, reply_at), endpoint `/orders/:id/review` (buyer setelah `delivered`/`completed`), seller balas (`PUT /reviews/:id/reply`), agregat `rating_avg` + `rating_count` produk
+- [x] **Fase 19** — staff sub-account: kolom `staff_permissions` user (array `view_orders`/`manage_products`/`manage_channels`), endpoint `POST /staff` (undang email → kirim password sementara), middleware guard fitur per izin (orders/products/channels), UI seller toggle izin per staff
+- [x] **Fase 20** — export laporan: endpoint `/reports/export?format=csv` (CSV balance/order/product), frontend tombol Download CSV di halaman Laporan, format RFC 4180 (Excel-compatible)
+- [x] **Fase 21** — analytics lanjut: `conversion_rate` (paid / total_orders × 100%), laporan support `?compare=prev` (periode sebelumnya → `previous` + `delta` revenue/%, order, net), chart perbandingan periode (grafik CSS dual-bar), frontend kartu komparasi (hijau naik / merah turun)
+- [x] **Fase 22** — chat buyer↔seller per order: tabel `order_messages` (sender buyer/seller, read_at), buyer publik (verifikasi HP), seller auth (tenant guard), notif seller tiap pesan buyer, badge unread `GET /messages/unread`, ChatBox komponen poll 10 dtk, chat tutup saat order `cancelled`
+- [x] **Fase 23** — restock & low-stock alert: kolom `low_stock_at` (threshold default 5) + `low_stock_alerted` (flag idempoten), `StockAlertService`: stok habis → auto-hold (`archived`) + notif `stock.empty`, stok ≤ threshold → notif `stock.low` sekali, restock → reset flag, hook checkout/cancel/retur/update manual produk, endpoint `GET /products-alerts/low-stock` (daftar menipis/habis), badge kuning/merah di tabel produk seller, field threshold di form tambah produk
 
 ---
 
