@@ -40,6 +40,28 @@ interface FeeSettings {
   fee_buyer_percent: number
   admin_fee_per_item: number
   seller_fee_per_item: number
+  biteship_api_key: string
+}
+
+interface KycRow {
+  id: number
+  name: string
+  slug: string
+  email: string | null
+  phone: string | null
+  kyc_status: 'pending' | 'approved' | 'rejected'
+  kyc_nik: string | null
+  has_ktp: boolean
+  kyc_submitted_at: string | null
+  kyc_reviewed_at: string | null
+  kyc_reject_reason: string | null
+  address: string | null
+  province: string | null
+  city_name: string | null
+  district: string | null
+  postal_code: string | null
+  active: boolean
+  created_at: string
 }
 
 interface GatewayStatus {
@@ -81,7 +103,7 @@ const fmt = (n: number) => 'Rp' + n.toLocaleString('id-ID')
 
 export default function Admin() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<'merchants' | 'withdrawals' | 'settings' | 'payment' | 'orders' | 'vouchers'>('merchants')
+  const [tab, setTab] = useState<'merchants' | 'withdrawals' | 'settings' | 'payment' | 'orders' | 'vouchers' | 'kyc'>('merchants')
   const [stats, setStats] = useState<Stats | null>(null)
   const [rows, setRows] = useState<MerchantRow[]>([])
   const [wds, setWds] = useState<WithdrawRow[]>([])
@@ -89,6 +111,8 @@ export default function Admin() {
   const [gateway, setGateway] = useState<GatewayStatus | null>(null)
   const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([])
   const [adminVouchers, setAdminVouchers] = useState<AdminVoucher[]>([])
+  const [kycRows, setKycRows] = useState<KycRow[]>([])
+  const [kycFilter, setKycFilter] = useState('pending')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
 
@@ -181,6 +205,33 @@ export default function Admin() {
     }
   }
 
+  const loadKyc = async (status = kycFilter) => {
+    try {
+      const r = await api.get<{ data: KycRow[] }>(`/admin/kyc${status ? `?status=${status}` : ''}`)
+      setKycRows(r.data)
+    } catch (e) {
+      setErr((e as ApiError).message)
+    }
+  }
+
+  const kycReview = async (m: KycRow, action: 'approve' | 'reject') => {
+    let reason: string | null = null
+    if (action === 'reject') {
+      reason = prompt('Alasan penolakan (dikirim ke seller):', 'Dokumen tidak jelas.')
+      if (reason === null) return
+    } else if (!confirm(`Setujui pendaftaran "${m.name}"? Toko langsung tayang.`)) return
+    setBusy(m.id)
+    setErr('')
+    try {
+      await api.put(`/admin/kyc/${m.id}`, { action, reason: reason ?? undefined })
+      await loadKyc()
+    } catch (e) {
+      setErr((e as ApiError).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const adminCancel = async (o: AdminOrder) => {
     if (!confirm(`Batalkan order ${o.order_no}? Stok & kuota voucher dikembalikan.`)) return
     setBusy(o.id)
@@ -229,6 +280,7 @@ export default function Admin() {
     if (t === 'payment') loadGateway()
     if (t === 'orders') loadAdminOrders()
     if (t === 'vouchers') loadAdminVouchers()
+    if (t === 'kyc') loadKyc()
   }
 
   const processWithdrawal = async (w: WithdrawRow, decision: 'approved' | 'rejected') => {
@@ -273,6 +325,7 @@ export default function Admin() {
           {(
             [
               ['merchants', 'Merchant'],
+              ['kyc', 'Verifikasi KYC'],
               ['orders', 'Pesanan'],
               ['vouchers', 'Voucher'],
               ['withdrawals', 'Penarikan'],
@@ -392,6 +445,111 @@ export default function Admin() {
             </div>
           </div>
         </>
+      )}
+
+      {tab === 'kyc' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Verifikasi KYC Seller</h2>
+            <select
+              value={kycFilter}
+              onChange={(e) => {
+                setKycFilter(e.target.value)
+                loadKyc(e.target.value)
+              }}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm"
+            >
+              <option value="pending">Menunggu</option>
+              <option value="approved">Disetujui</option>
+              <option value="rejected">Ditolak</option>
+            </select>
+          </div>
+          {kycRows.length === 0 ? (
+            <div className="text-sm text-slate-500">Tidak ada pendaftaran pada status ini.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500 border-b">
+                  <th className="py-2 pr-2">Toko</th>
+                  <th className="py-2 pr-2">Alamat</th>
+                  <th className="py-2 pr-2">NIK</th>
+                  <th className="py-2 pr-2">Tanggal</th>
+                  <th className="py-2 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kycRows.map((m) => (
+                  <tr key={m.id} className="border-b last:border-0 align-top">
+                    <td className="py-2 pr-2">
+                      <div className="font-medium">{m.name}</div>
+                      <div className="text-xs text-slate-500">{m.email}</div>
+                      {m.phone && <div className="text-xs text-slate-500">HP: {m.phone}</div>}
+                      {m.kyc_reject_reason && (
+                        <div className="text-xs text-rose-600">Alasan tolak: {m.kyc_reject_reason}</div>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2 max-w-xs text-xs">
+                      {[m.address, m.district, m.city_name, m.province, m.postal_code]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </td>
+                    <td className="py-2 pr-2">
+                      {m.kyc_nik && <div className="font-mono text-xs">{m.kyc_nik}</div>}
+                      {m.has_ktp ? (
+                        <a
+                          className="text-xs text-slate-900 underline"
+                          href={`/api/v1/admin/kyc/${m.id}/ktp`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Lihat KTP
+                        </a>
+                      ) : (
+                        <div className="text-xs text-slate-400">KTP tidak ada</div>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2 text-xs text-slate-500">
+                      Daftar {new Date(m.created_at).toLocaleDateString('id-ID')}
+                      {m.kyc_reviewed_at && (
+                        <div>Review {new Date(m.kyc_reviewed_at).toLocaleDateString('id-ID')}</div>
+                      )}
+                    </td>
+                    <td className="py-2 text-right whitespace-nowrap">
+                      {m.kyc_status === 'pending' ? (
+                        <>
+                          <button
+                            onClick={() => kycReview(m, 'approve')}
+                            disabled={busy === m.id}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white mr-1.5 disabled:opacity-50"
+                          >
+                            {busy === m.id ? '…' : 'Setujui'}
+                          </button>
+                          <button
+                            onClick={() => kycReview(m, 'reject')}
+                            disabled={busy === m.id}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 disabled:opacity-50"
+                          >
+                            Tolak
+                          </button>
+                        </>
+                      ) : (
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full ${
+                            m.kyc_status === 'approved'
+                              ? 'bg-green-50 text-green-700'
+                              : 'bg-red-50 text-red-600'
+                          }`}
+                        >
+                          {m.kyc_status === 'approved' ? 'Disetujui' : 'Ditolak'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       )}
 
       {tab === 'orders' && (
@@ -637,6 +795,22 @@ export default function Admin() {
               onChange={(e) => setSettings({ ...settings, seller_fee_per_item: Number(e.target.value) })}
               className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
             />
+          </label>
+          <h3 className="font-semibold pt-2">Integrasi Pengiriman (Biteship)</h3>
+          <label className="block text-sm">
+            <span className="text-slate-600">API key Biteship</span>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder={settings.biteship_api_key ? '•••••••• (isi ulang bila ganti)' : 'biteship_test.xxxxx'}
+              value={settings.biteship_api_key ?? ''}
+              onChange={(e) => setSettings({ ...settings, biteship_api_key: e.target.value })}
+              className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 font-mono"
+            />
+            <span className="text-xs text-slate-500">
+              Satu key global di sini. Seller otomatis cetak resi via kurir Biteship — tanpa setting API
+              masing-masing. Dapatkan di dashboard Biteship → Developer → API Keys.
+            </span>
           </label>
           <button
             type="submit"
