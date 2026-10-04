@@ -136,6 +136,7 @@ export default function Checkout() {
       }>('/checkout', {
         merchant_slug: shopSlug,
         ...form,
+        courier: selected.courier,
         service: selected.service,
         shipping_cost: selected.cost,
         voucher_code: voucherCode || undefined,

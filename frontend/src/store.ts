@@ -17,6 +17,15 @@ export interface RegisterPayload {
   password: string
   password_confirmation: string
   store_name: string
+  // Alamat pengambilan kurir Biteship (origin cek ongkir) + identitas KYC.
+  phone: string
+  address: string
+  province: string
+  city_name: string
+  district: string
+  postal_code: string
+  kyc_nik: string
+  kyc_ktp: File | null
 }
 
 export const useAuth = create<AuthState>()(
@@ -40,7 +49,12 @@ export const useAuth = create<AuthState>()(
       },
 
       register: async (payload) => {
-        await api.post('/auth/register', payload)
+        // Multipart: ada upload foto KTP (kyc_ktp).
+        const fd = new FormData()
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== null && v !== undefined && v !== '') fd.append(k, v as string | File)
+        })
+        await api.post('/auth/register', fd)
         // Login otomatis setelah daftar
         await useAuth.getState().login(payload.email, payload.password)
       },
