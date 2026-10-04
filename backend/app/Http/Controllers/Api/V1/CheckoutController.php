@@ -465,9 +465,12 @@ class CheckoutController extends Controller
         return response()->json($orders);
     }
 
-    /** Guard kepemilikan order oleh merchant login. */
+    /** Guard kepemilikan order oleh merchant login (atau admin untuk semua order). */
     private function authorizeOrder(Request $request, Order $order): void
     {
+        if ($request->user()->role === 'admin') {
+            return;
+        }
         abort_unless($order->merchant_id === $request->user()->merchant?->id, 403);
     }
 

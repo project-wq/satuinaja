@@ -55,7 +55,7 @@ const fmt = (n: number) => 'Rp' + n.toLocaleString('id-ID')
 
 export default function Admin() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<'merchants' | 'withdrawals' | 'settings' | 'payment'>('merchants')
+  const [tab, setTab] = useState<'merchants' | 'orders' | 'vouchers' | 'withdrawals' | 'settings' | 'payment'>('merchants')
   const [stats, setStats] = useState<Stats | null>(null)
   const [rows, setRows] = useState<MerchantRow[]>([])
   const [wds, setWds] = useState<WithdrawRow[]>([])
@@ -198,6 +198,8 @@ export default function Admin() {
           {(
             [
               ['merchants', 'Merchant'],
+              ['orders', 'Pesanan'],
+              ['vouchers', 'Voucher'],
               ['withdrawals', 'Penarikan'],
               ['settings', 'Pengaturan'],
               ['payment', 'Pembayaran'],
