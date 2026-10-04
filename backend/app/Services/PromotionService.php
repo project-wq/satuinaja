@@ -76,7 +76,6 @@ class PromotionService
             $unit = (int) ($l['unit_sale'] ?? $l['price'] ?? 0);
             $eligible += $unit * (int) $l['qty'];
         }
-        }
 
         if ($eligible <= 0) {
             return ['subtotal' => 0, 'discount' => 0, 'free_shipping' => false, 'error' => 'Voucher tidak berlaku untuk produk di keranjang.'];

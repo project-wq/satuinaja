@@ -160,6 +160,10 @@ class CheckoutController extends Controller
                     $merchant,
                     array_column($lines, 'product_id'),
                 );
+                // Batas pemakaian per pembeli ditegakkan di sini juga.
+                if ($voucher && $this->promo->buyerLimitReached($voucher, $data['buyer_phone'] ?? null)) {
+                    $voucher = null;
+                }
                 if ($voucher) {
                     $vr = $this->promo->apply($voucher, $lines, $shippingCost);
                     if (! $vr['error']) {

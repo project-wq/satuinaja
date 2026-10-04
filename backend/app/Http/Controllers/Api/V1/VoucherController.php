@@ -40,7 +40,10 @@ class VoucherController extends Controller
         $merchant = $request->user()->merchant;
         $data = $this->validateData($request, $merchant, null);
 
-        $voucher = Voucher::create($data + ['merchant_id' => $merchant->id]);
+        // Voucher platform dibuat admin (merchant_id = null, berlaku lintas toko).
+        $data['merchant_id'] = $data['scope'] === 'platform' ? null : $merchant?->id;
+
+        $voucher = Voucher::create($data);
 
         return response()->json(['data' => $voucher], 201);
     }
@@ -56,6 +59,16 @@ class VoucherController extends Controller
     {
         $this->authorizeVoucher($request, $voucher);
         $merchant = $request->user()->merchant;
+
+        // Update parsial: field yang tak dikirim diisi nilai lama.
+        $request->merge(array_merge(
+            $voucher->only([
+                'scope', 'product_id', 'code', 'name', 'type', 'value', 'min_spend',
+                'max_discount', 'quota', 'max_per_buyer', 'free_shipping', 'active',
+                'start_at', 'end_at',
+            ]),
+            $request->all(),
+        ));
         $data = $this->validateData($request, $merchant, $voucher);
 
         $voucher->update($data);
@@ -138,7 +151,7 @@ class VoucherController extends Controller
 
     // ---- helper ----
 
-    private function validateData(Request $request, Merchant $merchant, ?Voucher $current): array
+    private function validateData(Request $request, ?Merchant $merchant, ?Voucher $current): array
     {
         $data = $request->validate([
             'scope' => ['required', 'in:product,shop,platform'],
@@ -165,7 +178,7 @@ class VoucherController extends Controller
         // scope=product wajib product_id milik merchant ini.
         if ($data['scope'] === 'product') {
             $pid = (int) ($data['product_id'] ?? 0);
-            $owned = Product::withoutGlobalScope('merchant')
+            $owned = $merchant !== null && Product::withoutGlobalScope('merchant')
                 ->where('merchant_id', $merchant->id)
                 ->where('id', $pid)
                 ->exists();

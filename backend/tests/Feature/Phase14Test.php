@@ -112,12 +112,12 @@ class Phase14Test extends TestCase
         $res = $this->postJson('/api/v1/checkout', $this->checkoutPayload($m, $p, 'HEMAT10'));
 
         $res->assertCreated();
-        $order = Order::where('order_no', $res['order_no'])->firstOrFail();
+        $order = Order::where('order_no', $res['data']['order_no'])->firstOrFail();
 
         $this->assertSame(5000, $order->voucher_discount);
         $this->assertSame('HEMAT10', $order->voucher_code);
         $this->assertSame($v->id, $order->voucher_id);
-        $this->assertSame(20000, $order->shipping_discount);
+        $this->assertSame(0, $order->shipping_discount); // HEMAT10 bukan gratis ongkir
         $this->assertSame(200000 + 22000 + 2000 + 20000 - 5000, $order->total);
 
         // Kuota terpakai + redemption tercatat.
@@ -135,7 +135,7 @@ class Phase14Test extends TestCase
         $res = $this->postJson('/api/v1/checkout', $this->checkoutPayload($m, $p, 'HEMAT10'));
 
         $res->assertCreated();
-        $order = Order::where('order_no', $res['order_no'])->firstOrFail();
+        $order = Order::where('order_no', $res['data']['order_no'])->firstOrFail();
 
         $this->assertNull($order->voucher_id);
         $this->assertSame(0, $order->voucher_discount);
@@ -170,10 +170,11 @@ class Phase14Test extends TestCase
         ]);
         $this->voucher(['scope' => 'product', 'product_id' => $other->id]);
 
-        // Keranjang berisi Kaos saja → voucher produk Celana tak berlaku.
+        // Keranjang berisi Kaos saja → voucher produk Celana tak ditemukan.
         $res = $this->postJson('/api/v1/checkout/preview', $this->checkoutPayload($m, $p, 'HEMAT10'));
         $res->assertOk();
-        $this->assertSame(0, $res['data']['voucher']['discount']);
+        $this->assertNull($res['data']['voucher']);
+        $this->assertSame(200000 + 22000 + 2000 + 20000, $res['data']['total']);
     }
 
     // ---------- kuota / voucher ----------
@@ -191,7 +192,7 @@ class Phase14Test extends TestCase
         $res = $this->postJson('/api/v1/checkout', $this->checkoutPayload($m, $p, 'LINTAS'));
         $res->assertCreated();
 
-        $order = Order::where('order_no', $res['order_no'])->firstOrFail();
+        $order = Order::where('order_no', $res['data']['order_no'])->firstOrFail();
         $this->assertSame(7000, $order->voucher_discount);
     }
 
