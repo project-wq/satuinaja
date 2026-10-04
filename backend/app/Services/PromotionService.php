@@ -72,7 +72,10 @@ class PromotionService
             if ($voucher->scope === 'product' && (int) $voucher->product_id !== (int) $l['product_id']) {
                 continue;
             }
-            $eligible += $l['unit_sale'] * $l['qty'];
+            // store() baris memakai 'price'; preview memakai 'unit_sale' — dua-duanya didukung.
+            $unit = (int) ($l['unit_sale'] ?? $l['price'] ?? 0);
+            $eligible += $unit * (int) $l['qty'];
+        }
         }
 
         if ($eligible <= 0) {

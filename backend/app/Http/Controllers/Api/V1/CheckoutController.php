@@ -7,6 +7,7 @@ use App\Models\Merchant;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Voucher;
+use App\Models\VoucherRedemption;
 use App\Services\FeeService;
 use App\Services\MidtransService;
 use App\Support\Audit;
@@ -133,6 +134,7 @@ class CheckoutController extends Controller
                     'title' => $product->title.$nameSuffix,
                     'price' => $basePrice,
                     'discount_price' => $product->discount_price,
+                    'unit_sale' => $f['unit_sale'],
                     'qty' => $item['qty'],
                     'line_total' => $f['base_sale'],
                     'buyer_fee' => $f['buyer_fee'],

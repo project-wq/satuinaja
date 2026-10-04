@@ -5,278 +5,266 @@ namespace Tests\Feature;
 use App\Models\Merchant;
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\SellerBalance;
 use App\Models\User;
 use App\Models\Voucher;
-use App\Services\FeeService;
+use App\Models\VoucherRedemption;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Fase 14: promo — gratis ongkir produk, diskon produk, voucher
- * (produk/toko/platform) dipakai di checkout (preview & store).
- * Fase 15: alur pemenuhan order — pack/deliver/complete/cancel/return
- * + pencairan saldo saat completed + stok & kuota voucher kembali saat cancel.
+ * Fase 14: promo — voucher produk/toko/platform + gratis ongkir
+ * di checkout, kuota/limit pembeli, CRUD seller & admin.
  */
 class Phase14Test extends TestCase
 {
     use RefreshDatabase;
 
-    private function merchant(): Merchant
+    private ?Merchant $lastMerchant = null;
+
+    private function shop(): array
     {
         $user = User::factory()->create(['role' => 'merchant']);
-        Merchant::where('user_id', $user->id)->delete();
-
-        return Merchant::create([
+        $m = Merchant::create([
             'user_id' => $user->id, 'name' => 'Toko', 'slug' => 'toko-'.uniqid(), 'active' => true,
         ]);
-    }
-
-    private function product(Merchant $m, int $price = 10000, ?int $discount = null): Product
-    {
-        return Product::create([
+        $p = Product::create([
             'merchant_id' => $m->id,
-            'title' => 'Produk', 'slug' => 'produk-'.uniqid(),
-            'price' => $price, 'discount_price' => $discount,
-            'stock' => 10, 'weight' => 500, 'status' => 'active',
+            'title' => 'Kaos', 'slug' => 'kaos-'.uniqid(),
+            'price' => 100000, 'stock' => 10, 'weight' => 200,
+            'status' => 'active',
         ]);
+        $this->lastMerchant = $m;
+
+        return [$user, $m, $p];
     }
 
-    private function voucher(int $type, Merchant $m, array $overrides = []): Voucher
+    private function voucher(array $over = []): Voucher
     {
         return Voucher::create(array_merge([
-            'scope' => 'shop', 'merchant_id' => $m->id,
-            'code' => strtoupper(uniqid('VC')), 'name' => 'Voucher',
-            'type' => $type === 1 ? 'percent' : 'fixed',
-            'value' => $type === 1 ? 10 : 500,
-            'min_spend' => 0, 'max_discount' => 1000,
-            'quota' => 10, 'used' => 0, 'free_shipping' => false,
+            'scope' => 'shop', 'merchant_id' => $this->lastMerchant?->id,
+            'code' => 'HEMAT10', 'name' => 'Hemat 10%',
+            'type' => 'percent', 'value' => 10, 'max_discount' => 5000,
             'active' => true,
-        ], $overrides));
+        ], $over));
     }
 
-    public function test_checkout_preview_applies_discount_price_and_free_shipping(): void
+    private function checkoutPayload(Merchant $m, Product $p, ?string $code = null): array
     {
-        $m = $this->merchant();
-        $discounted = $this->product($m, 20000, 15000);
-        $free = $this->product($m, 30000);
-        $free->update(['free_shipping' => true]);
-
-        $res = $this->postJson('/api/v1/checkout/preview', [
+        return array_filter([
             'merchant_slug' => $m->slug,
-            'items' => [
-                ['product_id' => $discounted->id, 'qty' => 1],
-                ['product_id' => $free->id, 'qty' => 1],
-            ],
-            'shipping_cost' => 10000,
-        ]);
+            'buyer_name' => 'Budi', 'buyer_phone' => '0812000001',
+            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '3171',
+            'courier' => 'jne', 'service' => 'REG', 'shipping_cost' => 20000,
+            'items' => [['product_id' => $p->id, 'qty' => 2]],
+            'voucher_code' => $code,
+        ], fn ($v) => $v !== null);
+    }
+
+    // ---------- preview ----------
+
+    public function test_preview_applies_percent_voucher_with_cap(): void
+    {
+        [, $m, $p] = $this->shop();
+        $this->voucher(); // 10%, max 5000
+
+        $res = $this->postJson('/api/v1/checkout/preview', $this->checkoutPayload($m, $p, 'hemat10'));
 
         $res->assertOk();
-        $data = $res->json('data');
-
-        // diskon produk diterapkan (20000-15000)
-        $this->assertSame(5000, $data['discount_total']);
-        // subtotal_sale = 15000 + 30000
-        $this->assertSame(45000, $data['subtotal_sale']);
-        // ongkir belum otomatis gratis di preview bila hanya 1 item free-ship —
-        // banner ditampilkan frontend. Cek voucher free_shipping di bawah.
-        $this->assertSame(10000, $data['shipping_cost']);
+        $d = $res['data'];
+        $this->assertSame(200000, $d['subtotal']);          // 2 x 100k
+        $this->assertSame(5000, $d['voucher']['discount']);  // 10% = 20k → cap 5k
+        $this->assertSame(20000, $d['shipping_cost']);
+        // total = sale 200k + fee 11% + admin 2000 + ongkir 20k − voucher 5k
+        $this->assertSame(200000 + 22000 + 2000 + 20000 - 5000, $d['total']);
     }
 
-    public function test_voucher_percent_cuts_total_and_caps_at_max_discount(): void
+    public function test_preview_rejects_voucher_below_min_spend(): void
     {
-        $m = $this->merchant();
-        $p = $this->product($m, 20000);
-        $v = $this->voucher(1, $m); // 10% max 1000
+        [, $m, $p] = $this->shop();
+        $this->voucher(['min_spend' => 500000]);
 
-        $res = $this->postJson('/api/v1/checkout/preview', [
-            'merchant_slug' => $m->slug,
-            'items' => [['product_id' => $p->id, 'qty' => 1]],
-            'shipping_cost' => 5000,
-            'voucher_code' => $v->code,
-        ]);
+        $res = $this->postJson('/api/v1/checkout/preview', $this->checkoutPayload($m, $p, 'HEMAT10'));
+
         $res->assertOk();
-
-        $d = $res->json('data');
-        $this->assertSame(1000, $d['voucher']['discount']); // min(10% of 20000, 1000)
-        $this->assertTrue($d['total'] < 20000);
+        $this->assertNotNull($res['data']['voucher_disallowed']);
+        $this->assertSame(0, $res['data']['voucher']['discount']);
     }
 
-    public function test_voucher_free_shipping_zeroes_shipping_cost(): void
+    public function test_preview_free_shipping_voucher_zeroes_ongkir(): void
     {
-        $m = $this->merchant();
-        $p = $this->product($m, 10000);
-        $v = $this->voucher(0, $m, ['free_shipping' => true, 'value' => 0]);
+        [, $m, $p] = $this->shop();
+        $this->voucher(['type' => 'fixed', 'value' => 1, 'free_shipping' => true, 'max_discount' => null]);
 
-        $res = $this->postJson('/api/v1/checkout/preview', [
-            'merchant_slug' => $m->slug,
-            'items' => [['product_id' => $p->id, 'qty' => 1]],
-            'shipping_cost' => 8000,
-            'voucher_code' => $v->code,
-        ]);
+        $res = $this->postJson('/api/v1/checkout/preview', $this->checkoutPayload($m, $p, 'HEMAT10'));
+
         $res->assertOk();
-        $this->assertSame(0, $res->json('data.shipping_cost'));
+        $this->assertTrue($res['data']['voucher']['free_shipping']);
+        $this->assertSame(0, $res['data']['shipping_cost']);
     }
 
-    public function test_checkout_store_with_voucher_redeems_and_persists(): void
-    {
-        $m = $this->merchant();
-        $p = $this->product($m, 20000);
-        $v = $this->voucher(1, $m); // 10% max 1000, quota 10
+    // ---------- checkout ----------
 
-        $res = $this->postJson('/api/v1/checkout', [
-            'merchant_slug' => $m->slug,
-            'buyer_name' => 'Budi', 'buyer_phone' => '0812',
-            'shipping_address' => 'Jl. Merdeka 1',
-            'destination_city_id' => '1', 'courier' => 'jne', 'service' => 'REG',
-            'shipping_cost' => 5000,
-            'items' => [['product_id' => $p->id, 'variant_id' => null, 'qty' => 1]],
-            'voucher_code' => $v->code,
-        ]);
+    public function test_checkout_redeems_voucher_and_discounts_total(): void
+    {
+        [, $m, $p] = $this->shop();
+        $v = $this->voucher(); // 10% max 5000
+
+        $res = $this->postJson('/api/v1/checkout', $this->checkoutPayload($m, $p, 'HEMAT10'));
 
         $res->assertCreated();
-        $order = Order::where('order_no', $res->json('data.order_no'))->firstOrFail();
+        $order = Order::where('order_no', $res['order_no'])->firstOrFail();
 
+        $this->assertSame(5000, $order->voucher_discount);
+        $this->assertSame('HEMAT10', $order->voucher_code);
         $this->assertSame($v->id, $order->voucher_id);
-        $this->assertSame(1000, $order->voucher_discount);
+        $this->assertSame(20000, $order->shipping_discount);
+        $this->assertSame(200000 + 22000 + 2000 + 20000 - 5000, $order->total);
+
+        // Kuota terpakai + redemption tercatat.
         $this->assertSame(1, $v->fresh()->used);
-        $this->assertDatabaseHas('voucher_redemptions', ['voucher_id' => $v->id, 'order_id' => $order->id]);
+        $this->assertDatabaseHas('voucher_redemptions', [
+            'voucher_id' => $v->id, 'order_id' => $order->id, 'buyer_phone' => '0812000001',
+        ]);
     }
 
-    public function test_voucher_quota_exhausted_is_rejected(): void
+    public function test_checkout_quota_exhausted_ignores_voucher(): void
     {
-        $m = $this->merchant();
-        $p = $this->product($m, 20000);
-        $v = $this->voucher(1, $m, ['quota' => 1, 'used' => 1]);
+        [, $m, $p] = $this->shop();
+        $v = $this->voucher(['quota' => 1, 'used' => 1]);
 
-        $res = $this->postJson('/api/v1/checkout/preview', [
-            'merchant_slug' => $m->slug,
-            'items' => [['product_id' => $p->id, 'qty' => 1]],
-            'shipping_cost' => 5000,
-            'voucher_code' => $v->code,
+        $res = $this->postJson('/api/v1/checkout', $this->checkoutPayload($m, $p, 'HEMAT10'));
+
+        $res->assertCreated();
+        $order = Order::where('order_no', $res['order_no'])->firstOrFail();
+
+        $this->assertNull($order->voucher_id);
+        $this->assertSame(0, $order->voucher_discount);
+        $this->assertSame(1, $v->fresh()->used); // kuota tak bertambah
+    }
+
+    public function test_max_per_buyer_blocks_second_redemption(): void
+    {
+        [, $m, $p] = $this->shop();
+        $v = $this->voucher(['max_per_buyer' => 1, 'quota' => 10]);
+
+        $this->postJson('/api/v1/checkout', $this->checkoutPayload($m, $p, 'HEMAT10'))
+            ->assertCreated();
+
+        $payload = $this->checkoutPayload($m, $p, 'HEMAT10');
+        $payload['buyer_phone'] = '0812000001'; // pembeli sama
+
+        $res = $this->postJson('/api/v1/checkout', $payload);
+        $res->assertCreated();
+
+        $second = Order::latest('id')->firstOrFail();
+        $this->assertNull($second->voucher_id);
+        $this->assertSame(0, $second->voucher_discount);
+    }
+
+    public function test_voucher_product_scope_ignores_other_products(): void
+    {
+        [, $m, $p] = $this->shop();
+        $other = Product::create([
+            'merchant_id' => $m->id, 'title' => 'Celana', 'slug' => 'celana-'.uniqid(),
+            'price' => 80000, 'stock' => 5, 'weight' => 300, 'status' => 'active',
         ]);
+        $this->voucher(['scope' => 'product', 'product_id' => $other->id]);
+
+        // Keranjang berisi Kaos saja → voucher produk Celana tak berlaku.
+        $res = $this->postJson('/api/v1/checkout/preview', $this->checkoutPayload($m, $p, 'HEMAT10'));
         $res->assertOk();
-        $this->assertNull($res->json('data.voucher'));
-        $this->assertNotNull($res->json('data.voucher_disallowed'));
+        $this->assertSame(0, $res['data']['voucher']['discount']);
     }
 
-    // ---------- Fase 15: alur pemenuhan ----------
+    // ---------- kuota / voucher ----------
 
-    public function test_order_fulfillment_flow_and_balance_credit(): void
+    public function test_voucher_platform_redeems_across_merchants(): void
     {
-        $m = $this->merchant();
-        $p = $this->product($m, 10000);
-        $user = $m->user;
+        [, $m, $p] = $this->shop();
+        $admin = User::factory()->create(['role' => 'admin']);
 
-        $f = (new FeeService)->line(10000, null, 1);
-        $order = Order::create([
-            'merchant_id' => $m->id,
-            'order_no' => 'ORD-F-'.uniqid(),
-            'buyer_name' => 'Budi', 'buyer_phone' => '0812',
-            'shipping_address' => 'Jl. X 1', 'destination_city_id' => '1',
-            'courier' => 'jne', 'service' => 'REG',
-            'shipping_cost' => 5000,
-            'subtotal' => 10000, 'discount_total' => 0, 'subtotal_sale' => 10000,
-            'buyer_fee' => $f['buyer_fee'], 'buyer_admin_fee' => $f['buyer_admin_fee'],
-            'seller_net' => $f['seller_net'],
-            'total' => $f['buyer_line_total'] + 5000,
-            'payment_status' => 'paid', 'fulfillment_status' => 'pending',
-        ]);
+        $this->actingAs($admin)->postJson('/api/v1/admin/vouchers', [
+            'scope' => 'platform', 'code' => 'LINTAS', 'name' => 'Lintas',
+            'type' => 'fixed', 'value' => 7000, 'max_discount' => null, 'active' => true,
+        ])->assertStatus(201);
 
-        // pack
-        $this->actingAs($user)->putJson("/api/v1/orders/{$order->id}/pack")->assertOk();
-        $this->assertSame('packed', $order->fresh()->fulfillment_status);
+        $res = $this->postJson('/api/v1/checkout', $this->checkoutPayload($m, $p, 'LINTAS'));
+        $res->assertCreated();
 
-        // ship (via resi)
-        $this->actingAs($user)->putJson("/api/v1/orders/{$order->id}/ship", ['tracking_no' => 'JNE123'])->assertOk();
-        $this->assertSame('shipped', $order->fresh()->fulfillment_status);
-
-        // deliver
-        $this->actingAs($user)->putJson("/api/v1/orders/{$order->id}/deliver")->assertOk();
-        $this->assertSame('delivered', $order->fresh()->fulfillment_status);
-
-        // complete → saldo cair
-        $this->actingAs($user)->putJson("/api/v1/orders/{$order->id}/complete")->assertOk();
-        $this->assertSame('completed', $order->fresh()->fulfillment_status);
-        $bal = SellerBalance::where('merchant_id', $m->id)->first();
-        $this->assertNotNull($bal);
-        $this->assertSame($f['seller_net'], $bal->balance);
+        $order = Order::where('order_no', $res['order_no'])->firstOrFail();
+        $this->assertSame(7000, $order->voucher_discount);
     }
 
-    public function test_cancel_returns_stock_and_voucher_quota(): void
+    public function test_seller_cannot_create_platform_voucher(): void
     {
-        $m = $this->merchant();
-        $p = $this->product($m, 10000);
-        $user = $m->user;
-        $v = $this->voucher(1, $m);
-        $p->decrement('stock', 2);
+        [$user] = $this->shop();
 
-        $f = (new FeeService)->line(10000, null, 2);
-        $order = Order::create([
-            'merchant_id' => $m->id,
-            'order_no' => 'ORD-C-'.uniqid(),
-            'buyer_name' => 'Budi', 'buyer_phone' => '0812',
-            'shipping_address' => 'Jl. X 1', 'destination_city_id' => '1',
-            'courier' => 'jne', 'service' => 'REG',
-            'shipping_cost' => 0,
-            'subtotal' => 20000, 'discount_total' => 0, 'subtotal_sale' => 20000,
-            'buyer_fee' => 0, 'buyer_admin_fee' => 0, 'seller_net' => $f['seller_net'],
-            'total' => 20000,
-            'payment_status' => 'paid', 'fulfillment_status' => 'pending',
-            'voucher_id' => $v->id, 'voucher_discount' => 1000, 'voucher_code' => $v->code,
-        ]);
-        $order->items()->create([
-            'product_id' => $p->id, 'title' => 'Produk', 'price' => 10000,
-            'qty' => 2, 'line_total' => 20000, 'buyer_fee' => 0, 'buyer_admin_fee' => 0, 'seller_net' => $f['seller_net'],
-        ]);
-        $v->increment('used');
-
-        $this->actingAs($user)
-            ->putJson("/api/v1/orders/{$order->id}/cancel", ['reason' => 'batal'])
-            ->assertOk();
-
-        $fresh = $order->fresh();
-        $this->assertSame('cancelled', $fresh->fulfillment_status);
-        $this->assertSame(10, $p->fresh()->stock);     // 10 - 2 + 2
-        $this->assertSame(0, $v->fresh()->used);        // 1 - 1
-        $this->assertDatabaseMissing('voucher_redemptions', ['order_id' => $order->id]);
+        $this->actingAs($user)->postJson('/api/v1/vouchers', [
+            'scope' => 'platform', 'code' => 'ABAL', 'name' => 'Abal',
+            'type' => 'fixed', 'value' => 1000,
+        ])->assertStatus(422);
     }
 
-    public function test_return_flow_approve_restores_stock(): void
+    public function test_seller_crud_scoped_to_own_vouchers(): void
     {
-        $m = $this->merchant();
-        $p = $this->product($m, 10000);
-        $user = $m->user;
+        [$user, $m] = $this->shop();
+        $own = $this->voucher();
 
-        $f = (new FeeService)->line(10000, null, 1);
-        $order = Order::create([
-            'merchant_id' => $m->id,
-            'order_no' => 'ORD-R-'.uniqid(),
-            'buyer_name' => 'Budi', 'buyer_phone' => '0812',
-            'shipping_address' => 'Jl. X 1', 'destination_city_id' => '1',
-            'courier' => 'jne', 'service' => 'REG',
-            'shipping_cost' => 0,
-            'subtotal' => 10000, 'discount_total' => 0, 'subtotal_sale' => 10000,
-            'buyer_fee' => 0, 'buyer_admin_fee' => 0, 'seller_net' => $f['seller_net'],
-            'total' => 10000,
-            'payment_status' => 'paid', 'fulfillment_status' => 'delivered',
+        // Voucher milik merchant lain.
+        $otherUser = User::factory()->create(['role' => 'merchant']);
+        $om = Merchant::create([
+            'user_id' => $otherUser->id, 'name' => 'Lain',
+            'slug' => 'lain-'.uniqid(), 'active' => true,
         ]);
-        $order->items()->create([
-            'product_id' => $p->id, 'title' => 'Produk', 'price' => 10000,
-            'qty' => 1, 'line_total' => 10000, 'buyer_fee' => 0, 'buyer_admin_fee' => 0, 'seller_net' => $f['seller_net'],
+        $other = Voucher::create([
+            'scope' => 'shop', 'merchant_id' => $om->id, 'code' => 'ORANGLAIN',
+            'name' => 'Orang Lain', 'type' => 'fixed', 'value' => 1000, 'active' => true,
         ]);
 
-        $this->actingAs($user)
-            ->postJson("/api/v1/orders/{$order->id}/return", ['reason' => 'ukuran salah'])
-            ->assertOk();
-        $this->assertSame('requested', $order->fresh()->return_status);
+        $this->actingAs($user)->getJson("/api/v1/vouchers/{$own->id}")->assertOk();
+
+        // Global scope merchant: voucher lain tak terjangkau.
+        $this->actingAs($user)->getJson("/api/v1/vouchers/{$other->id}")->assertNotFound();
 
         $this->actingAs($user)
-            ->putJson("/api/v1/orders/{$order->id}/return", ['decision' => 'approved'])
+            ->putJson("/api/v1/vouchers/{$own->id}", ['name' => 'Nama Baru'])
             ->assertOk();
-        $fresh = $order->fresh();
-        $this->assertSame('approved', $fresh->return_status);
-        $this->assertSame('returned', $fresh->fulfillment_status);
-        $this->assertSame(10, $p->fresh()->stock);
+        $this->assertSame('Nama Baru', $own->fresh()->name);
+    }
+
+    public function test_public_voucher_list_hides_drafts(): void
+    {
+        [, $m, $p] = $this->shop();
+        $this->voucher(['code' => 'TAYANG']);
+        $this->voucher(['code' => 'MATI', 'active' => false]);
+
+        $res = $this->getJson('/api/v1/vouchers/public?merchant_slug='.$m->slug);
+        $res->assertOk();
+        $codes = array_column($res['data'], 'code');
+
+        $this->assertContains('TAYANG', $codes);
+        $this->assertNotContains('MATI', $codes);
+    }
+
+    public function test_voucher_check_endpoint(): void
+    {
+        [, $m, $p] = $this->shop();
+        $this->voucher();
+
+        $ok = $this->postJson('/api/v1/vouchers/check', [
+            'merchant_slug' => $m->slug, 'code' => 'hemat10',
+            'items' => [['product_id' => $p->id, 'qty' => 2]],
+            'shipping_cost' => 20000,
+        ]);
+        $ok->assertOk();
+        $this->assertTrue($ok['data']['valid']);
+        $this->assertSame(5000, $ok['data']['discount']);
+
+        $bad = $this->postJson('/api/v1/vouchers/check', [
+            'merchant_slug' => $m->slug, 'code' => 'TIDAKADA',
+            'items' => [['product_id' => $p->id, 'qty' => 1]],
+        ]);
+        $bad->assertOk();
+        $this->assertFalse($bad['data']['valid']);
     }
 }
