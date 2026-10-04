@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError } from '../../services/api'
+import { api, ApiError, type Order, type Voucher, type Paginated } from '../../services/api'
 import { useAuth } from '../../store'
 
 interface Stats {
@@ -51,16 +51,26 @@ interface GatewayStatus {
   note: string
 }
 
+interface AdminOrder extends Order {
+  merchant: { id: number; name: string; slug: string } | null
+}
+
+interface AdminOrder extends Order {
+  merchant: { id: number; name: string } | null
+}
+
 const fmt = (n: number) => 'Rp' + n.toLocaleString('id-ID')
 
 export default function Admin() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<'merchants' | 'orders' | 'vouchers' | 'withdrawals' | 'settings' | 'payment'>('merchants')
+  const [tab, setTab] = useState<'merchants' | 'withdrawals' | 'settings' | 'payment' | 'orders' | 'vouchers'>('merchants')
   const [stats, setStats] = useState<Stats | null>(null)
   const [rows, setRows] = useState<MerchantRow[]>([])
   const [wds, setWds] = useState<WithdrawRow[]>([])
   const [settings, setSettings] = useState<FeeSettings | null>(null)
   const [gateway, setGateway] = useState<GatewayStatus | null>(null)
+  const [adminOrders, setAdminOrders] = useState<AdminOrder[]>([])
+  const [adminVouchers, setAdminVouchers] = useState<AdminVoucher[]>([])
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState<number | null>(null)
 
@@ -203,6 +213,8 @@ export default function Admin() {
               ['withdrawals', 'Penarikan'],
               ['settings', 'Pengaturan'],
               ['payment', 'Pembayaran'],
+              ['orders', 'Order'],
+              ['vouchers', 'Voucher'],
             ] as const
           ).map(([key, label]) => (
             <button
