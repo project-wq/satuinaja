@@ -51,25 +51,6 @@ interface GatewayStatus {
   note: string
 }
 
-interface AdminOrder {
-  id: number
-  order_no: string
-  buyer_name: string
-  buyer_phone: string
-  subtotal: number
-  shipping_cost: number
-  total: number
-  tracking_no: string | null
-  payment_status: string
-  fulfillment_status: string
-  voucher_code: string | null
-  voucher_discount: number
-  shipping_discount: number
-  return_status: string | null
-  merchant: { id: number; name: string } | null
-  items?: { id: number; title: string; price: number; qty: number; line_total: number }[]
-}
-
 interface AdminVoucher {
   id: number
   scope: 'product' | 'shop' | 'platform'
@@ -90,10 +71,6 @@ interface AdminVoucher {
   end_at: string | null
   merchant: { id: number; name: string } | null
   product: { id: number; title: string } | null
-}
-
-interface AdminOrder extends Order {
-  merchant: { id: number; name: string; slug: string } | null
 }
 
 interface AdminOrder extends Order {
@@ -186,6 +163,51 @@ export default function Admin() {
     }
   }
 
+  const loadAdminOrders = async () => {
+    try {
+      const r = await api.get<Paginated<AdminOrder>>('/admin/orders')
+      setAdminOrders(r.data)
+    } catch (e) {
+      setErr((e as ApiError).message)
+    }
+  }
+
+  const loadAdminVouchers = async () => {
+    try {
+      const r = await api.get<Paginated<AdminVoucher>>('/admin/vouchers')
+      setAdminVouchers(r.data)
+    } catch (e) {
+      setErr((e as ApiError).message)
+    }
+  }
+
+  const adminCancel = async (o: AdminOrder) => {
+    if (!confirm(`Batalkan order ${o.order_no}? Stok & kuota voucher dikembalikan.`)) return
+    setBusy(o.id)
+    setErr('')
+    try {
+      await api.put(`/admin/orders/${o.id}/cancel`, { reason: 'Dibatalkan admin', by: 'admin' })
+      await loadAdminOrders()
+    } catch (e) {
+      setErr((e as ApiError).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const toggleVoucher = async (v: AdminVoucher) => {
+    setBusy(v.id)
+    setErr('')
+    try {
+      await api.put(`/admin/vouchers/${v.id}`, { active: !v.active })
+      await loadAdminVouchers()
+    } catch (e) {
+      setErr((e as ApiError).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const setGatewayMode = async (sandbox: boolean) => {
     setBusy(-2)
     setErr('')
@@ -205,6 +227,8 @@ export default function Admin() {
     if (t === 'withdrawals') loadWithdrawals()
     if (t === 'settings') loadSettings()
     if (t === 'payment') loadGateway()
+    if (t === 'orders') loadAdminOrders()
+    if (t === 'vouchers') loadAdminVouchers()
   }
 
   const processWithdrawal = async (w: WithdrawRow, decision: 'approved' | 'rejected') => {
@@ -254,8 +278,6 @@ export default function Admin() {
               ['withdrawals', 'Penarikan'],
               ['settings', 'Pengaturan'],
               ['payment', 'Pembayaran'],
-              ['orders', 'Order'],
-              ['vouchers', 'Voucher'],
             ] as const
           ).map(([key, label]) => (
             <button
