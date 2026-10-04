@@ -23,16 +23,15 @@ class VoucherController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $merchant = $request->user()->merchant;
-
-        $vouchers = Voucher::query()
+        $isAdmin = $request->user()->role === 'admin';
+        $query = Voucher::withoutGlobalScope('merchant')
+            ->with('product:id,title')
             ->when($request->string('scope')->toString(), fn ($q, $s) => $q->where('scope', $s))
             ->when($request->boolean('active_only'), fn ($q) => $q->where('active', true))
-            ->with('product:id,title')
-            ->latest()
-            ->paginate(20);
+            ->when(! $isAdmin, fn ($q) => $q->where('merchant_id', $request->user()->merchant?->id))
+            ->latest();
 
-        return response()->json($vouchers);
+        return response()->json($query->paginate(20));
     }
 
     public function store(Request $request): JsonResponse
