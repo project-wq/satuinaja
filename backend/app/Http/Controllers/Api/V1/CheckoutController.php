@@ -23,6 +23,7 @@ class CheckoutController extends Controller
         private FeeService $fee,
         private \App\Services\NotificationService $notif,
         private \App\Services\PromotionService $promo,
+        private \App\Services\BiteshipService $biteship,
     ) {
     }
 
@@ -71,7 +72,8 @@ class CheckoutController extends Controller
             'buyer_phone' => ['required', 'string', 'max:32'],
             'buyer_email' => ['nullable', 'email', 'max:120'],
             'shipping_address' => ['required', 'string', 'max:1000'],
-            'destination_city_id' => ['required', 'string', 'max:16'],
+            'destination_city_id' => ['nullable', 'string', 'max:16'],
+            'destination_postal_code' => ['required', 'string', 'regex:/^\d{5}$/'],
             'courier' => ['required', 'string', 'max:32'],
             'service' => ['required', 'string', 'max:64'],
             'shipping_cost' => ['required', 'integer', 'min:0', 'max:10000000'],
@@ -183,7 +185,8 @@ class CheckoutController extends Controller
                 'buyer_phone' => $data['buyer_phone'],
                 'buyer_email' => $data['buyer_email'] ?? null,
                 'shipping_address' => $data['shipping_address'],
-                'destination_city_id' => $data['destination_city_id'],
+                'destination_city_id' => $data['destination_city_id'] ?? null,
+                'destination_postal_code' => $data['destination_postal_code'],
                 'courier' => $data['courier'],
                 'service' => $data['service'],
                 'shipping_cost' => $shippingCost,
@@ -254,28 +257,143 @@ class CheckoutController extends Controller
         return response()->json(['data' => $order->load('items')]);
     }
 
-    /** Input nomor resi + tandai sudah dikirim. */
+    /**
+     * Kirim order.
+     * Tanpa body → otomatis buat order Biteship (multi-kurir) + dapat resi.
+     * Dengan tracking_no → resi manual (fallback bila API key belum diset).
+     */
     public function ship(Request $request, Order $order): JsonResponse
     {
         abort_unless($order->merchant_id === $request->user()->merchant->id, 403);
+
         $data = $request->validate([
-            'tracking_no' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9\-]+$/'],
+            'tracking_no' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9\-]+$/'],
         ]);
+
+        // Mode manual: seller input resi sendiri.
+        if (! empty($data['tracking_no'])) {
+            $order->update([
+                'tracking_no' => Str::upper($data['tracking_no']),
+                'fulfillment_status' => 'shipped',
+                'shipped_at' => now(),
+            ]);
+            Audit::record('order.shipped', $order, ['tracking_no' => $order->tracking_no, 'mode' => 'manual']);
+
+            $this->notif->push(
+                $order->merchant_id,
+                'order.shipped',
+                'Order ditandai terkirim',
+                "Order {$order->order_no} dikirim dengan resi {$order->tracking_no}.",
+                '/seller/orders',
+            );
+
+            return response()->json(['data' => $order->fresh()]);
+        }
+
+        // Mode otomatis: Biteship create order → nomor resi langsung jadi.
+        $merchant = $order->merchant()->firstOrFail();
+        abort_unless((bool) $merchant->postal_code, 422, 'Alamat toko belum lengkap (kode pos) — lengkapi saat registrasi/verifikasi.');
+
+        if ($order->fulfillment_status !== 'packed') {
+            abort_unless($order->fulfillment_status === 'pending', 422, 'Order sudah pernah dikirim.');
+        }
+
+        $items = $order->items()->with('product')->get();
+        $weight = max((int) $items->sum(fn ($i) => ($i->product?->weight ?? 100) * $i->qty), 1);
+
+        $result = $this->biteship->createOrder([
+            'shipper_contact_name' => $merchant->name,
+            'shipper_contact_phone' => $merchant->phone ?: $order->buyer_phone,
+            'origin_contact_name' => $merchant->name,
+            'origin_contact_phone' => $merchant->phone ?: $order->buyer_phone,
+            'origin_address' => collect([
+                $merchant->address, $merchant->district, $merchant->city_name, $merchant->province,
+            ])->filter()->implode(', '),
+            'origin_postal_code' => (int) $merchant->postal_code,
+            'destination_contact_name' => $order->buyer_name,
+            'destination_contact_phone' => $order->buyer_phone,
+            'destination_address' => $order->shipping_address,
+            'destination_postal_code' => (int) $order->destination_postal_code,
+            'courier_company' => $order->courier,
+            'courier_type' => $order->service,
+            'delivery_type' => 'now',
+            'reference_id' => $order->order_no,
+            'order_note' => $order->seller_note,
+            'items' => $items->map(fn ($i) => [
+                'name' => mb_substr($i->title, 0, 60),
+                'value' => (int) $i->line_total,
+                'quantity' => (int) $i->qty,
+                'weight' => (int) ($i->product?->weight ?? 100),
+            ])->values()->all(),
+        ]);
+
+        if (! $result['ok']) {
+            return response()->json([
+                'ok' => false,
+                'error' => $result['error'],
+                'hint' => 'Bisa juga kirim resi manual dengan mengisi kolom resi.',
+            ], 422);
+        }
+
+        $b = $result['data'];
         $order->update([
-            'tracking_no' => Str::upper($data['tracking_no']),
+            'tracking_no' => $b['waybill_id'] ?? $order->order_no,
+            'biteship_order_id' => $b['id'],
+            'routing_code' => $b['routing_code'],
+            'biteship_price' => $b['price'],
+            'courier' => $b['courier_company'] ?: $order->courier,
+            'service' => $b['courier_type'] ?: $order->service,
             'fulfillment_status' => 'shipped',
+            'shipped_at' => now(),
         ]);
-        Audit::record('order.shipped', $order, ['tracking_no' => $order->tracking_no]);
+
+        Audit::record('order.shipped', $order, [
+            'mode' => 'biteship',
+            'tracking_no' => $order->tracking_no,
+            'biteship_order_id' => $b['id'],
+        ]);
 
         $this->notif->push(
             $order->merchant_id,
             'order.shipped',
-            'Order ditandai terkirim',
-            "Order {$order->order_no} dikirim dengan resi {$order->tracking_no}.",
+            'Order terkirim (resi otomatis)',
+            "Order {$order->order_no} resi {$order->tracking_no} ({$order->courier}).",
             '/seller/orders',
         );
 
-        return response()->json(['data' => $order->fresh()]);
+        return response()->json([
+            'data' => $order->fresh(),
+            'label' => $this->labelPayload($order->fresh(), $merchant),
+        ]);
+    }
+
+    /** Data untuk mencetak label pengiriman (Biteship tidak menyediakan API label). */
+    private function labelPayload(Order $order, ?Merchant $merchant = null): array
+    {
+        $merchant ??= $order->merchant()->firstOrFail();
+
+        return [
+            'order_no' => $order->order_no,
+            'courier' => $order->courier,
+            'service' => $order->service,
+            'waybill' => $order->tracking_no,
+            'routing_code' => $order->routing_code,
+            'weight_gram' => max((int) $order->items()->with('product')->get()
+                ->sum(fn ($i) => ($i->product?->weight ?? 100) * $i->qty), 1),
+            'sender' => [
+                'name' => $merchant->name,
+                'address' => collect([$merchant->address, $merchant->district, $merchant->city_name, $merchant->province])
+                    ->filter()->implode(', '),
+                'postal_code' => $merchant->postal_code,
+                'phone' => $merchant->phone,
+            ],
+            'recipient' => [
+                'name' => $order->buyer_name,
+                'address' => $order->shipping_address,
+                'postal_code' => $order->destination_postal_code,
+                'phone' => $order->buyer_phone,
+            ],
+        ];
     }
 
     /** Lacak status order publik via nomor order (storefront). */

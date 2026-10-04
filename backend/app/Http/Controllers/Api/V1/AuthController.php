@@ -93,7 +93,7 @@ class AuthController extends Controller
             'kyc_ktp' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
         ]);
 
-        $ktpPath = $request->file('kyc_ktp')->store('kyc', 'private');
+        $ktpPath = $request->file('kyc_ktp')->store('kyc', 'local');
 
         $user = User::create([
             'name' => $data['name'],

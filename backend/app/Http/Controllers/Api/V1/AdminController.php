@@ -15,6 +15,7 @@ use App\Services\BalanceService;
 use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 /**
@@ -138,6 +139,7 @@ class AdminController extends Controller
             'fee_buyer_percent' => (int) Setting::get('fee_buyer_percent', '11'),
             'admin_fee_per_item' => (int) Setting::get('admin_fee_per_item', '1000'),
             'seller_fee_per_item' => (int) Setting::get('seller_fee_per_item', '500'),
+            'biteship_api_key' => Setting::get('biteship_api_key', (string) config('services.biteship.key', '')),
         ]]);
     }
 
@@ -168,6 +170,92 @@ class AdminController extends Controller
     }
 
     /** Ubah konfigurasi fee. */
+    /**
+     * Fase 16: review KYC seller baru (approve → toko aktif, reject → tolak).
+     * Body: { action: approve|reject, reason?: string }
+     */
+    public function kycIndex(Request $request): JsonResponse
+    {
+        $this->ensureAdmin();
+
+        $status = $request->string('status')->toString();
+        $q = Merchant::with('user')->latest();
+        if (in_array($status, ['pending', 'approved', 'rejected'], true)) {
+            $q->where('kyc_status', $status);
+        }
+
+        $page = $q->paginate(20, ['*'], 'page', (int) $request->query('page', 1));
+
+        return response()->json([
+            'data' => $page->map(fn ($m) => [
+                'id' => $m->id,
+                'name' => $m->name,
+                'slug' => $m->slug,
+                'email' => $m->user?->email,
+                'phone' => $m->phone,
+                'kyc_status' => $m->kyc_status,
+                'kyc_nik' => $m->kyc_nik,
+                'has_ktp' => (bool) $m->kyc_ktp_path,
+                'kyc_submitted_at' => $m->kyc_submitted_at,
+                'kyc_reviewed_at' => $m->kyc_reviewed_at,
+                'kyc_reject_reason' => $m->kyc_reject_reason,
+                'address' => $m->address,
+                'province' => $m->province,
+                'city_name' => $m->city_name,
+                'district' => $m->district,
+                'postal_code' => $m->postal_code,
+                'active' => $m->active,
+                'created_at' => $m->created_at,
+            ]),
+            'pagination' => [
+                'current_page' => $page->currentPage(),
+                'last_page' => $page->lastPage(),
+                'total' => $page->total(),
+            ],
+        ]);
+    }
+
+    /** Setujui/tolak pendaftaran seller. */
+    public function kycReview(Request $request, Merchant $merchant): JsonResponse
+    {
+        $this->ensureAdmin();
+        $data = $request->validate([
+            'action' => ['required', Rule::in(['approve', 'reject'])],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        abort_unless($merchant->kyc_status !== 'approved' || $data['action'] !== 'approve', 422, 'Sudah disetujui.');
+
+        $approve = $data['action'] === 'approve';
+        $merchant->update([
+            'kyc_status' => $approve ? 'approved' : 'rejected',
+            'kyc_reviewed_at' => now(),
+            'kyc_reject_reason' => $approve ? null : ($data['reason'] ?? 'Tidak memenuhi syarat.'),
+            'active' => $approve,
+        ]);
+
+        Audit::record($approve ? 'admin.kyc.approved' : 'admin.kyc.rejected', $merchant, [
+            'reason' => $data['reason'] ?? null,
+        ]);
+
+        return response()->json(['data' => [
+            'id' => $merchant->id,
+            'kyc_status' => $merchant->fresh()->kyc_status,
+            'active' => $merchant->fresh()->active,
+        ]]);
+    }
+
+    /** Foto KTP seller (privat, hanya admin). */
+    public function kycKtp(Merchant $merchant): mixed
+    {
+        $this->ensureAdmin();
+
+        abort_unless($merchant->kyc_ktp_path, 404, 'KTP tidak ada.');
+        abort_unless(Storage::disk('local')->exists($merchant->kyc_ktp_path), 404, 'File KTP hilang.');
+
+        return response()->file(Storage::disk('local')->path($merchant->kyc_ktp_path));
+    }
+
     public function updateSettings(Request $request): JsonResponse
     {
         $this->ensureAdmin();
@@ -175,6 +263,8 @@ class AdminController extends Controller
             'fee_buyer_percent' => ['sometimes', 'integer', 'min:0', 'max:100'],
             'admin_fee_per_item' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'seller_fee_per_item' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
+            // API key Biteship (jasa kirim): simpan utuh, tampil utuh hanya ke admin.
+            'biteship_api_key' => ['sometimes', 'string', 'max:256'],
         ]);
 
         foreach ($data as $key => $value) {

@@ -40,7 +40,7 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
     Route::get('shops/{slug}/products/{productSlug}', [StorefrontController::class, 'product']);
 
     // Utilitas publik
-    Route::get('shipping/cities', [ShippingController::class, 'cities']);
+    Route::get('shipping/status', [ShippingController::class, 'status']);
     Route::post('shipping/cost', [ShippingController::class, 'cost']);
     Route::get('shipping/track', [ShippingController::class, 'track']);
 
@@ -119,6 +119,11 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
         // Fase 15: admin lihat semua order + intervensi alur
         Route::get('orders', [CheckoutController::class, 'adminIndex']);
         Route::put('orders/{order}/cancel', [CheckoutController::class, 'cancel']);
+
+        // Fase 16: review KYC seller (approve/reject pendaftaran) + foto KTP
+        Route::get('kyc', [AdminController::class, 'kycIndex']);
+        Route::put('kyc/{merchant}', [AdminController::class, 'kycReview']);
+        Route::get('kyc/{merchant}/ktp', [AdminController::class, 'kycKtp']);
     });
 
     // Fase 5: saldo seller + withdraw (merchant login)
