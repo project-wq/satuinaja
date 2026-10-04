@@ -347,6 +347,9 @@ class CheckoutController extends Controller
             'buyer_fee' => $order->buyer_fee,
             'buyer_admin_fee' => $order->buyer_admin_fee,
             'shipping_cost' => $order->shipping_cost,
+            'shipping_discount' => $order->shipping_discount,
+            'voucher_code' => $order->voucher_code,
+            'voucher_discount' => $order->voucher_discount,
             'total' => $order->total,
         ];
     }
