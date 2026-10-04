@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ShippingController;
 use App\Http\Controllers\Api\V1\StorefrontController;
 use App\Http\Controllers\Api\V1\VariantController;
+use App\Http\Controllers\Api\V1\VoucherController;
 use App\Http\Controllers\Api\V1\WebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -47,6 +48,10 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
     Route::post('checkout/preview', [CheckoutController::class, 'preview']);
     Route::post('checkout', [CheckoutController::class, 'store']);
     Route::get('orders/track/{orderNo}', [CheckoutController::class, 'track']);
+
+    // Fase 14: voucher publik (daftar tayang + cek kode).
+    Route::get('vouchers', [VoucherController::class, 'publicList']);
+    Route::post('vouchers/check', [VoucherController::class, 'check']);
 });
 
 // ---------- Webhook (signature-verified, tanpa auth) ----------
@@ -103,6 +108,17 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
         // Fase 7: status payment gateway (KYC Midtrans produksi)
         Route::get('payment-gateway', [AdminController::class, 'paymentGateway']);
         Route::put('payment-gateway', [AdminController::class, 'updatePaymentGateway']);
+
+        // Fase 14: voucher platform (dibuat admin, berlaku lintas merchant)
+        Route::get('vouchers', [VoucherController::class, 'index']);
+        Route::post('vouchers', [VoucherController::class, 'store']);
+        Route::get('vouchers/{voucher}', [VoucherController::class, 'show']);
+        Route::put('vouchers/{voucher}', [VoucherController::class, 'update']);
+        Route::delete('vouchers/{voucher}', [VoucherController::class, 'destroy']);
+
+        // Fase 15: admin lihat semua order + intervensi alur
+        Route::get('orders', [CheckoutController::class, 'adminIndex']);
+        Route::put('orders/{order}/cancel', [CheckoutController::class, 'cancel']);
     });
 
     // Fase 5: saldo seller + withdraw (merchant login)
@@ -114,6 +130,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     Route::get('orders', [CheckoutController::class, 'index']);
     Route::get('orders/{order}', [CheckoutController::class, 'show']);
     Route::put('orders/{order}/ship', [CheckoutController::class, 'ship']);
+
+    // Fase 14: voucher milik merchant.
+    Route::apiResource('vouchers', VoucherController::class)->except(['check']);
+    Route::post('vouchers/check', [VoucherController::class, 'check']);
 
     // Fase 6: refund oleh seller
     Route::get('refunds', [RefundController::class, 'index']);

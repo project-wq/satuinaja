@@ -198,6 +198,11 @@ class CheckoutController extends Controller
 
             $order->items()->createMany($lines);
 
+            // Fase 14: catat pemakaian voucher (kuota + limit per pembeli).
+            if ($voucher && $voucherDiscount > 0) {
+                $this->promo->redeem($voucher, $order->id, $voucherDiscount, $data['buyer_phone']);
+            }
+
             return $order;
         });
 
@@ -269,10 +274,6 @@ class CheckoutController extends Controller
 
     /** Lacak status order publik via nomor order (storefront). */
     public function track(string $orderNo): JsonResponse
-    {
-        $order = Order::withoutGlobalScope('merchant')
-            ->where('order_no', $orderNo)
-            ->firstOrFail();
 
         return response()->json(['data' => [
             'order_no' => $order->order_no,

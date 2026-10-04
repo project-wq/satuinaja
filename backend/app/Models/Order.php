@@ -16,6 +16,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'shipping_cost', 'subtotal', 'discount_total', 'subtotal_sale',
     'buyer_fee', 'buyer_admin_fee', 'seller_net', 'total', 'tracking_no',
     'payment_status', 'payment_ref', 'payment_url', 'fulfillment_status',
+    'voucher_id', 'voucher_discount', 'voucher_code', 'shipping_discount',
+    'packed_at', 'shipped_at', 'delivered_at', 'completed_at',
+    'cancelled_at', 'cancelled_by', 'cancel_reason',
+    'return_status', 'return_requested_at', 'return_reason',
+    'seller_note', 'courier_tracking_url',
 ])]
 class Order extends Model
 {
@@ -31,6 +36,14 @@ class Order extends Model
         'buyer_admin_fee' => 'integer',
         'seller_net' => 'integer',
         'total' => 'integer',
+        'voucher_discount' => 'integer',
+        'shipping_discount' => 'integer',
+        'packed_at' => 'datetime',
+        'shipped_at' => 'datetime',
+        'delivered_at' => 'datetime',
+        'completed_at' => 'datetime',
+        'cancelled_at' => 'datetime',
+        'return_requested_at' => 'datetime',
     ];
 
     protected static function booted(): void
