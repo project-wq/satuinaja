@@ -13,6 +13,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'user_id', 'name', 'slug', 'logo_path', 'description',
     'phone', 'address', 'city_id', 'active',
+    'province', 'city_name', 'district', 'postal_code', 'area_id',
+    'kyc_status', 'kyc_nik', 'kyc_ktp_path',
+    'kyc_submitted_at', 'kyc_reviewed_at', 'kyc_reject_reason',
     'plan_code', 'publishes_this_month', 'last_publish_reset_at',
 ])]
 class Merchant extends Model
@@ -22,6 +25,8 @@ class Merchant extends Model
 
     protected $casts = [
         'active' => 'boolean',
+        'kyc_submitted_at' => 'datetime',
+        'kyc_reviewed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

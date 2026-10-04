@@ -71,6 +71,10 @@ class AuthController extends Controller
 
     /**
      * Registrasi merchant baru + toko default.
+     *
+     * Wajib: alamat pickup lengkap (dipakai Biteship sebagai origin cek
+     * ongkir & penjemputan kurir) + identitas KYC (NIK + foto KTP).
+     * Toko baru berstatus KYC pending → menunggu persetujuan admin.
      */
     public function register(Request $request): JsonResponse
     {
@@ -79,7 +83,17 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'store_name' => ['required', 'string', 'max:80'],
+            'phone' => ['nullable', 'string', 'max:32'],
+            'address' => ['required', 'string', 'max:500'],
+            'province' => ['required', 'string', 'max:80'],
+            'city_name' => ['required', 'string', 'max:80'],
+            'district' => ['required', 'string', 'max:80'],
+            'postal_code' => ['required', 'string', 'regex:/^\d{5}$/'],
+            'kyc_nik' => ['required', 'string', 'regex:/^\d{16}$/'],
+            'kyc_ktp' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
         ]);
+
+        $ktpPath = $request->file('kyc_ktp')->store('kyc', 'private');
 
         $user = User::create([
             'name' => $data['name'],
@@ -92,7 +106,17 @@ class AuthController extends Controller
             'user_id' => $user->id,
             'name' => $data['store_name'],
             'slug' => $this->uniqueSlug($data['store_name']),
-            'active' => true,
+            'phone' => $data['phone'] ?? null,
+            'address' => $data['address'],
+            'province' => $data['province'],
+            'city_name' => $data['city_name'],
+            'district' => $data['district'],
+            'postal_code' => $data['postal_code'],
+            'kyc_status' => 'pending',
+            'kyc_nik' => $data['kyc_nik'],
+            'kyc_ktp_path' => $ktpPath,
+            'kyc_submitted_at' => now(),
+            'active' => false,
         ]);
 
         Audit::record('merchant.registered', $user);
@@ -125,6 +149,8 @@ class AuthController extends Controller
                 'id' => $user->merchant->id,
                 'name' => $user->merchant->name,
                 'slug' => $user->merchant->slug,
+                'kyc_status' => $user->merchant->kyc_status,
+                'postal_code' => $user->merchant->postal_code,
             ] : null,
         ];
     }
