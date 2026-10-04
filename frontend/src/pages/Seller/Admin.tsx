@@ -51,6 +51,47 @@ interface GatewayStatus {
   note: string
 }
 
+interface AdminOrder {
+  id: number
+  order_no: string
+  buyer_name: string
+  buyer_phone: string
+  subtotal: number
+  shipping_cost: number
+  total: number
+  tracking_no: string | null
+  payment_status: string
+  fulfillment_status: string
+  voucher_code: string | null
+  voucher_discount: number
+  shipping_discount: number
+  return_status: string | null
+  merchant: { id: number; name: string } | null
+  items?: { id: number; title: string; price: number; qty: number; line_total: number }[]
+}
+
+interface AdminVoucher {
+  id: number
+  scope: 'product' | 'shop' | 'platform'
+  merchant_id: number | null
+  product_id: number | null
+  code: string
+  name: string
+  type: 'percent' | 'fixed'
+  value: number
+  min_spend: number
+  max_discount: number | null
+  quota: number | null
+  used: number
+  max_per_buyer: number
+  free_shipping: boolean
+  active: boolean
+  start_at: string | null
+  end_at: string | null
+  merchant: { id: number; name: string } | null
+  product: { id: number; title: string } | null
+}
+
 interface AdminOrder extends Order {
   merchant: { id: number; name: string; slug: string } | null
 }
