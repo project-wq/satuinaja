@@ -71,4 +71,10 @@ class Order extends Model
     {
         return $this->hasMany(OrderItem::class);
     }
+
+    /** Fase 22: chat buyer↔seller per order. */
+    public function messages(): HasMany
+    {
+        return $this->hasMany(OrderMessage::class)->orderBy('created_at');
+    }
 }
