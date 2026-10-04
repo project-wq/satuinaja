@@ -24,6 +24,7 @@ class Phase16Test extends TestCase
     {
         parent::setUp();
         Storage::fake('local');
+        config(['services.biteship.key' => 'biteship_test.unit']); // key test agar mode auto aktif
     }
 
     private function admin(): User
@@ -62,7 +63,8 @@ class Phase16Test extends TestCase
             'subtotal' => $p->price, 'discount_total' => $f['discount'],
             'subtotal_sale' => $f['base_sale'], 'buyer_fee' => $f['buyer_fee'],
             'buyer_admin_fee' => $f['buyer_admin_fee'], 'seller_net' => $f['seller_net'],
-            'total' => $f['total'], 'payment_status' => 'paid',
+            'total' => $f['base_sale'] + $f['buyer_fee'] + $f['buyer_admin_fee'] + 20000,
+            'payment_status' => 'paid',
             'fulfillment_status' => 'packed', 'packed_at' => now(),
         ]);
     }
@@ -166,12 +168,12 @@ class Phase16Test extends TestCase
         [$user, $m, $p] = $this->shop();
         $order = $this->orderPacked($m, $p);
 
+        config(['services.biteship.key' => '']); // pastikan kosong
+
         $this->actingAs($user)
             ->putJson("/api/v1/orders/{$order->id}/ship")
             ->assertStatus(422)
-            ->assertJsonPath('error', \App\Models\Setting::get('biteship_api_key', '') === ''
-                ? 'API key Biteship belum diatur. Setel di Admin → Pengaturan.'
-                : 'API key Biteship belum diatur. Setel di Admin → Pengaturan.');
+            ->assertJsonPath('error', 'API key Biteship belum diatur. Setel di Admin → Pengaturan, atau kirim resi manual.');
     }
 
     public function test_manual_resi_still_works_as_fallback(): void

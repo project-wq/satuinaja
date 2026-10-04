@@ -4,9 +4,18 @@ import Header, { rupiah } from '../components/ShopHeader'
 import { useCart } from '../store'
 import { api } from '../services/api'
 
+interface ShippingOption {
+  courier: string
+  service: string
+  name: string
+  description: string
+  cost: number
+  etd: string
+}
+
 interface CostResult {
   ok: boolean
-  data?: { services: { service: string; description: string; cost: number; etd: string }[] }
+  data?: { services: ShippingOption[] }
   error?: string
 }
 
@@ -41,14 +50,13 @@ export default function Checkout() {
   const { items, setQty, remove, subtotal, clear } = useCart()
   const [costs, setCosts] = useState<CostResult['data'] | null>(null)
   const [ongkirErr, setOngkirErr] = useState('')
-  const [selected, setSelected] = useState<{ service: string; cost: number; etd: string } | null>(null)
+  const [selected, setSelected] = useState<ShippingOption | null>(null)
   const [form, setForm] = useState({
     buyer_name: '',
     buyer_phone: '',
     buyer_email: '',
     shipping_address: '',
-    destination_city_id: '',
-    courier: 'jne',
+    destination_postal_code: '',
   })
   const [loadingCost, setLoadingCost] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -97,12 +105,11 @@ export default function Checkout() {
     setSelected(null)
     try {
       const res = await api.post<CostResult>('/shipping/cost', {
-        // origin diambil dari kota toko; untuk demo pakai 152 (Jakarta) sampai
-        // storefront mengirim city_id toko.
-        origin: '152',
-        destination: form.destination_city_id,
+        // Origin = alamat toko (registrasi seller), tujuan = kode pos pembeli.
+        merchant_slug: shopSlug,
+        destination_postal_code: form.destination_postal_code,
         weight: Math.max(totalWeight, 1),
-        courier: form.courier,
+        value: sub,
       })
       if (res.ok && res.data) setCosts(res.data)
       else setOngkirErr(res.error ?? 'Gagal cek ongkir.')
@@ -244,35 +251,23 @@ export default function Checkout() {
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-medium text-slate-700">ID Kota tujuan (RajaOngkir)</span>
+                <span className="text-sm font-medium text-slate-700">Kode pos tujuan</span>
                 <input
                   className={input}
                   required
-                  placeholder="mis. 152"
-                  value={form.destination_city_id}
-                  onChange={(e) => setForm({ ...form, destination_city_id: e.target.value })}
+                  inputMode="numeric"
+                  maxLength={5}
+                  placeholder="mis. 12950"
+                  value={form.destination_postal_code}
+                  onChange={(e) => setForm({ ...form, destination_postal_code: e.target.value })}
                 />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Kurir</span>
-                <select
-                  className={input}
-                  value={form.courier}
-                  onChange={(e) => setForm({ ...form, courier: e.target.value })}
-                >
-                  {['jne', 'pos', 'tiki', 'sicepat', 'jnt', 'anteraja', 'ninja', 'ide'].map((c) => (
-                    <option key={c} value={c}>
-                      {c.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
               </label>
             </div>
 
             <button
               type="button"
               onClick={cekOngkir}
-              disabled={loadingCost || !form.destination_city_id}
+              disabled={loadingCost || !/^\d{5}$/.test(form.destination_postal_code)}
               className="mt-4 px-4 py-2 rounded-lg border border-slate-300 text-sm hover:bg-slate-50 disabled:opacity-40"
             >
               {loadingCost ? 'Mengecek…' : 'Cek Ongkir'}
@@ -280,34 +275,40 @@ export default function Checkout() {
 
             {ongkirErr && (
               <p className="mt-3 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                {ongkirErr} <span className="text-xs">(isi RAJAONGKIR_API_KEY di backend .env)</span>
+                {ongkirErr} <span className="text-xs">(set API key Biteship di Admin → Pengaturan)</span>
               </p>
             )}
 
             {costs && (
               <div className="mt-3 space-y-2">
-                {costs.services.map((s) => (
-                  <label
-                    key={s.service}
-                    className={`flex items-center justify-between rounded-lg border px-3 py-2 cursor-pointer text-sm ${
-                      selected?.service === s.service ? 'border-slate-900 bg-slate-50' : 'border-slate-200'
-                    }`}
-                  >
-                    <span className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="service"
-                        checked={selected?.service === s.service}
-                        onChange={() => setSelected(s)}
-                      />
-                      <span>
-                        <span className="font-medium">{s.service}</span>{' '}
-                        <span className="text-slate-500">· {s.description} · {s.etd} hari</span>
+                {costs.services.map((s) => {
+                  const key = `${s.courier}-${s.service}`
+                  const isOn = selected && `${selected.courier}-${selected.service}` === key
+                  return (
+                    <label
+                      key={key}
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2 cursor-pointer text-sm ${
+                        isOn ? 'border-slate-900 bg-slate-50' : 'border-slate-200'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="service"
+                          checked={!!isOn}
+                          onChange={() => setSelected(s)}
+                        />
+                        <span>
+                          <span className="font-medium uppercase">{s.name || s.courier}</span>{' '}
+                          <span className="text-slate-500">
+                            · {s.description} {s.etd ? `· ${s.etd}` : ''}
+                          </span>
+                        </span>
                       </span>
-                    </span>
-                    <span className="font-medium">{rupiah(s.cost)}</span>
-                  </label>
-                ))}
+                      <span className="font-medium">{rupiah(s.cost)}</span>
+                    </label>
+                  )
+                })}
               </div>
             )}
           </section>
