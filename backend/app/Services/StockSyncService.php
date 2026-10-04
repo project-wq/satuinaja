@@ -100,11 +100,13 @@ class StockSyncService
         if ($missing) {
             return ['ok' => false, 'error' => 'Kredensial Shopee kurang: '.implode(', ', $missing).'.'];
         }
-
         try {
             $itemId = $this->externalIdOf($product, $channel);
-            // NOTE: item_id boleh 0 (belum pernah publish) — Shopee sandbox
-            // menerima update_item apa adanya; Fase 9 mengandalkan fallback ini.
+            if (! $itemId) {
+                // Fallback untuk produk yang belum pernah dipublikasikan: Shopee menerima update_item
+                // dengan item_id=0 (null → 0). Block per-model diabaikan saat belum ada pemetaan.
+                $itemId = 0;
+            }
 
             // Fase 12: produk bervarian yang sudah terpetakan → update_stock +
             // update_price per-model; bukan update_item agregat.
@@ -112,7 +114,7 @@ class StockSyncService
                 ->whereNotNull('shopee_model_id')
                 ->orderBy('position')
                 ->get();
-            if ($product->variants()->exists() && $mapped->isNotEmpty()) {
+            if ($itemId > 0 && $product->variants()->exists() && $mapped->isNotEmpty()) {
                 $rows = $mapped->map(fn ($v) => [
                     'model_id' => $v->shopee_model_id,
                     'stock' => $v->stock,
