@@ -103,6 +103,7 @@ export interface Product {
   price: number
   discount_price: number | null
   stock: number
+  low_stock_at?: number
   weight: number
   images: string[] | null
   status: 'draft' | 'active' | 'archived'

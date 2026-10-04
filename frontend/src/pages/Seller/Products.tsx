@@ -285,6 +285,18 @@ export default function Products() {
             </label>
 
             <label className="block">
+              <span className="text-sm font-medium text-slate-700">Batas Stok Menipis</span>
+              <input
+                type="number"
+                name="low_stock_at"
+                min={0}
+                defaultValue={5}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+              />
+              <span className="text-xs text-slate-400">Notif saat stok ≤ angka ini. Stok 0 = listing auto-arsip.</span>
+            </label>
+
+            <label className="block">
               <span className="text-sm font-medium text-slate-700">Berat (gram)</span>
               <input
                 type="number"
@@ -375,7 +387,14 @@ export default function Products() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">{rupiah(p.price)}</td>
-                  <td className="px-4 py-3 text-right">{p.stock}</td>
+                  <td className="px-4 py-3 text-right">
+                    {p.stock}
+                    {(p.low_stock_at ?? 5) >= p.stock && (
+                      <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${p.stock <= 0 ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {p.stock <= 0 ? 'habis' : 'menipis'}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full ${

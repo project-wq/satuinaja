@@ -80,6 +80,8 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     Route::post('auth/logout', [AuthController::class, 'logout']);
 
     Route::apiResource('products', ProductController::class);
+    // Fase 23: daftar produk menipis/habis.
+    Route::get('products-alerts/low-stock', [ProductController::class, 'lowStock']);
     Route::post('products/{product}/publish', [ProductController::class, 'publish']);
     Route::put('products/{product}/variants', [VariantController::class, 'sync']);
     Route::put('products/{product}/variants/{variant}', [VariantController::class, 'update']);

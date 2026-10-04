@@ -15,6 +15,10 @@ use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
+    public function __construct(private \App\Services\StockAlertService $stockAlert)
+    {
+    }
+
     public function index(Request $request): JsonResponse
     {
         $products = Product::query()
@@ -92,11 +96,17 @@ class ProductController extends Controller
             'price' => ['sometimes', 'integer', 'min:0', 'max:999999999'],
             'discount_price' => ['nullable', 'integer', 'min:0', 'max:999999999'],
             'stock' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
+            'low_stock_at' => ['sometimes', 'integer', 'min:0', 'max:1000000'],
             'weight' => ['sometimes', 'integer', 'min:1', 'max:100000'],
             'status' => ['sometimes', Rule::in(['draft', 'active', 'archived'])],
         ]);
 
         $product->update($data);
+
+        // Fase 23: restock manual / ubah threshold → cek alert.
+        if (array_key_exists('stock', $data) || array_key_exists('low_stock_at', $data)) {
+            $this->stockAlert->check($product->fresh());
+        }
 
         Audit::record('product.updated', $product, $data);
 
@@ -111,6 +121,23 @@ class ProductController extends Controller
         $product->delete();
 
         return response()->json(['message' => 'Produk dihapus.']);
+    }
+
+    /** Fase 23: daftar produk stok menipis/habis milik toko. */
+    public function lowStock(Request $request): JsonResponse
+    {
+        $merchant = $request->user()->effectiveMerchant();
+        $items = $this->stockAlert->lowStock($merchant->id)
+            ->map(fn (Product $p) => [
+                'id' => $p->id,
+                'title' => $p->title,
+                'stock' => $p->stock,
+                'low_stock_at' => $p->low_stock_at,
+                'status' => $p->status,
+                'empty' => $p->stock <= 0,
+            ])->all();
+
+        return response()->json(['data' => $items, 'count' => count($items)]);
     }
 
     /**
