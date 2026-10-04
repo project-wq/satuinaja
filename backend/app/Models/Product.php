@@ -37,7 +37,7 @@ class Product extends Model
     {
         // Tenant isolation: setiap query produk otomatis dibatasi merchant login.
         static::addGlobalScope('merchant', function (Builder $builder) {
-            $merchantId = auth()->user()?->merchant?->id;
+            $merchantId = auth()->user()?->tenantMerchantId();
             if ($merchantId !== null) {
                 $builder->where('products.merchant_id', $merchantId);
             }

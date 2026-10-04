@@ -62,6 +62,19 @@ class User extends Authenticatable
         return $this->merchant()->first();
     }
 
+    /**
+     * ID tenant untuk global scope: staf memakai toko majikannya.
+     * Semua scope model (Channel/Order/Product/Voucher) pakai ini.
+     */
+    public function tenantMerchantId(): ?int
+    {
+        if ($this->role === 'staff') {
+            return $this->owner_merchant_id;
+        }
+
+        return $this->merchant?->id;
+    }
+
     /** Staf dilarang akses keuangan (saldo/withdraw/refund/billing). */
     public function isStaff(): bool
     {

@@ -50,7 +50,7 @@ class Order extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('merchant', function (Builder $builder) {
-            $merchantId = auth()->user()?->merchant?->id;
+            $merchantId = auth()->user()?->tenantMerchantId();
             if ($merchantId !== null) {
                 $builder->where('orders.merchant_id', $merchantId);
             }

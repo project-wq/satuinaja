@@ -33,7 +33,7 @@ class Channel extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('merchant', function (Builder $builder) {
-            $merchantId = auth()->user()?->merchant?->id;
+            $merchantId = auth()->user()?->tenantMerchantId();
             if ($merchantId !== null) {
                 $builder->where('channels.merchant_id', $merchantId);
             }

@@ -31,7 +31,7 @@ class Voucher extends Model
     {
         // Tenant isolation: seller melihat voucher miliknya saja.
         static::addGlobalScope('merchant', function (Builder $builder) {
-            $merchantId = auth()->user()?->merchant?->id;
+            $merchantId = auth()->user()?->tenantMerchantId();
             $isAdmin = auth()->user()?->role === 'admin';
             if ($merchantId !== null && ! $isAdmin) {
                 $builder->where('vouchers.merchant_id', $merchantId);
