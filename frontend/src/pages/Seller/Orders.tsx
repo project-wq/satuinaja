@@ -7,7 +7,8 @@ import { rupiah } from '../../components/ShopHeader'
 function nextActions(o: Order): { key: string; label: string; danger?: boolean }[] {
   const a: { key: string; label: string; danger?: boolean }[] = []
   if (o.fulfillment_status === 'pending' && o.payment_status === 'paid') a.push({ key: 'pack', label: 'Kemas' })
-  if (o.fulfillment_status === 'packed') a.push({ key: 'deliver', label: 'Diterima' })
+  if (o.fulfillment_status === 'packed') a.push({ key: 'ship', label: 'Buat Resi Otomatis (Biteship)' })
+  if (o.fulfillment_status === 'shipped') a.push({ key: 'deliver', label: 'Diterima' })
   if (o.fulfillment_status === 'delivered') a.push({ key: 'complete', label: 'Selesai' })
   if (['pending', 'packed'].includes(o.fulfillment_status)) a.push({ key: 'cancel', label: 'Batal', danger: true })
   if (['shipped', 'delivered', 'completed'].includes(o.fulfillment_status) && !o.return_status)
@@ -29,14 +30,24 @@ export default function Orders() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['orders'] })
 
+  interface ShipResult {
+    ok: boolean
+    data: { tracking_no: string; fulfillment_status: string; biteship_order_id?: string | null }
+    error?: string
+  }
+
   const ship = useMutation({
-    mutationFn: ({ id, tracking }: { id: number; tracking: string }) =>
-      api.put(`/orders/${id}/ship`, { tracking_no: tracking }),
-    onSuccess: () => {
+    mutationFn: ({ id, tracking }: { id: number; tracking?: string }) =>
+      api.put<ShipResult>(`/orders/${id}/ship`, tracking ? { tracking_no: tracking } : {}),
+    onSuccess: (r) => {
       invalidate()
-      setToast('Resi disimpan.')
+      setToast(
+        r.data.biteship_order_id
+          ? `Resi Biteship terbit: ${r.data.tracking_no}. Cetak label di detail.`
+          : `Resi disimpan: ${r.data.tracking_no}.`,
+      )
     },
-    onError: (e) => setToast(e instanceof Error ? e.message : 'Gagal simpan resi'),
+    onError: (e) => setToast(e instanceof Error ? e.message : 'Gagal buat resi'),
   })
 
   const act = useMutation({
@@ -209,22 +220,34 @@ export default function Orders() {
                       {o.tracking_no ? (
                         <span className="font-mono text-xs">{o.tracking_no}</span>
                       ) : o.fulfillment_status === 'packed' ? (
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault()
-                            const fd = new FormData(e.currentTarget)
-                            ship.mutate({ id: o.id, tracking: String(fd.get('tracking') ?? '') })
-                          }}
-                          className="flex gap-2"
-                        >
-                          <input
-                            name="tracking"
-                            required
-                            placeholder="No. resi"
-                            className="w-28 text-xs rounded-lg border border-slate-300 px-2 py-1"
-                          />
-                          <button className="text-xs px-2 py-1 rounded-lg bg-slate-900 text-white">Kirim</button>
-                        </form>
+                        <div className="space-y-1.5">
+                          <button
+                            onClick={() => ship.mutate({ id: o.id })}
+                            disabled={ship.isPending}
+                            className="text-xs px-2 py-1 rounded-lg bg-slate-900 text-white disabled:opacity-50"
+                            title="Buat resi otomatis via Biteship dari alamat toko kamu"
+                          >
+                            {ship.isPending ? 'Memproses…' : 'Buat Resi Otomatis'}
+                          </button>
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault()
+                              const fd = new FormData(e.currentTarget)
+                              ship.mutate({ id: o.id, tracking: String(fd.get('tracking') ?? '') })
+                            }}
+                            className="flex gap-2"
+                          >
+                            <input
+                              name="tracking"
+                              required
+                              placeholder="No. resi manual"
+                              className="w-28 text-xs rounded-lg border border-slate-300 px-2 py-1"
+                            />
+                            <button className="text-xs px-2 py-1 rounded-lg border border-slate-300">
+                              Kirim
+                            </button>
+                          </form>
+                        </div>
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
