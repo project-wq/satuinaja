@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Merchant;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Voucher;
 use App\Services\FeeService;
 use App\Services\MidtransService;
 use App\Support\Audit;
@@ -20,12 +21,14 @@ class CheckoutController extends Controller
         private MidtransService $midtrans,
         private FeeService $fee,
         private \App\Services\NotificationService $notif,
+        private \App\Services\PromotionService $promo,
     ) {
     }
 
     /**
      * Preview rincian biaya (halaman checkout sebelum bayar):
      * harga - diskon + fee 11% + admin 1000/unit + ongkir = total.
+     * Fase 14: voucher_code optional → hitung diskon voucher + gratis ongkir.
      */
     public function preview(Request $request): JsonResponse
     {
@@ -36,16 +39,28 @@ class CheckoutController extends Controller
             'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:1000'],
             'shipping_cost' => ['nullable', 'integer', 'min:0'],
+            'voucher_code' => ['nullable', 'string', 'max:40'],
         ]);
 
         $merchant = Merchant::where('slug', $data['merchant_slug'])->where('active', true)->firstOrFail();
         $rows = $this->buildLines($merchant, $data['items']);
+        $shippingCost = $data['shipping_cost'] ?? 0;
 
-        return response()->json(['data' => $this->summarize($rows, $data['shipping_cost'] ?? 0)]);
+        $voucher = null;
+        $voucherResult = null;
+        if (! empty($data['voucher_code'])) {
+            $voucher = $this->promo->findUsable((string) $data['voucher_code'], $merchant, array_column($rows, 'product_id'));
+            if ($voucher) {
+                $voucherResult = $this->promo->apply($voucher, $rows, $shippingCost);
+            }
+        }
+
+        return response()->json(['data' => $this->summarize($rows, $shippingCost, $voucher, $voucherResult)]);
     }
 
     /**
      * Checkout publik: buat order (dengan rincian fee) + transaksi Midtrans.
+     * Fase 14: voucher_code optional → apply + redeem (dalam transaksi).
      */
     public function store(Request $request): JsonResponse
     {
@@ -63,6 +78,7 @@ class CheckoutController extends Controller
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:1000'],
+            'voucher_code' => ['nullable', 'string', 'max:40'],
         ]);
 
         $merchant = Merchant::where('slug', $data['merchant_slug'])->where('active', true)->firstOrFail();
@@ -282,12 +298,25 @@ class CheckoutController extends Controller
     }
 
     /** Ringkas rincian biaya dari daftar baris preview. */
-    private function summarize(array $rows, int $shipping): array
+    private function summarize(array $rows, int $shipping, ?Voucher $voucher = null, ?array $voucherResult = null): array
     {
         $subtotal = array_sum(array_map(fn ($r) => $r['price'] * $r['qty'], $rows));
         $sale = array_sum(array_map(fn ($r) => $r['line_total'], $rows));
         $fee = array_sum(array_map(fn ($r) => $r['buyer_fee'], $rows));
         $admin = array_sum(array_map(fn ($r) => $r['buyer_admin_fee'], $rows));
+        $shippingCost = $shipping;
+        $voucherDiscount = 0;
+        $freeShipping = false;
+
+        if ($voucher && $voucherResult && ! $voucherResult['error']) {
+            $voucherDiscount = (int) $voucherResult['discount'];
+            $freeShipping = (bool) $voucherResult['free_shipping'];
+            if ($freeShipping) {
+                $shippingCost = 0;
+            }
+        }
+
+        $voucherDisallowed = $voucher && $voucherResult && $voucherResult['error'] ? $voucherResult['error'] : null;
 
         return [
             'items' => $rows,
@@ -296,8 +325,15 @@ class CheckoutController extends Controller
             'subtotal_sale' => $sale,
             'buyer_fee' => $fee,
             'buyer_admin_fee' => $admin,
-            'shipping_cost' => $shipping,
-            'total' => $sale + $fee + $admin + $shipping,
+            'shipping_cost' => $shippingCost,
+            'total' => $sale + $fee + $admin + $shippingCost - $voucherDiscount,
+            'voucher' => $voucher ? [
+                'code' => $voucher->code,
+                'name' => $voucher->name,
+                'discount' => $voucherDiscount,
+                'free_shipping' => $freeShipping,
+            ] : null,
+            'voucher_disallowed' => $voucherDisallowed,
         ];
     }
 

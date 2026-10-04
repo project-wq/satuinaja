@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'merchant_id', 'title', 'slug', 'description', 'price',
     'discount_price', 'stock', 'weight', 'images', 'status',
+    'free_shipping', 'voucher_enabled', 'sold_count', 'rating_avg', 'rating_count',
 ])]
 class Product extends Model
 {
@@ -25,6 +26,11 @@ class Product extends Model
         'discount_price' => 'integer',
         'stock' => 'integer',
         'weight' => 'integer',
+        'free_shipping' => 'boolean',
+        'voucher_enabled' => 'boolean',
+        'sold_count' => 'integer',
+        'rating_avg' => 'integer',
+        'rating_count' => 'integer',
     ];
 
     protected static function booted(): void
@@ -53,8 +59,19 @@ class Product extends Model
         return $this->hasMany(ProductVariant::class)->orderBy('position');
     }
 
+    public function vouchers(): HasMany
+    {
+        return $this->hasMany(Voucher::class)->where('scope', 'product');
+    }
+
     public function scopePublic(Builder $builder): Builder
     {
         return $builder->where('status', 'active');
+    }
+
+    /** Harga setelah diskon langsung (bukan voucher). */
+    public function effectivePrice(): int
+    {
+        return $this->discount_price ?? $this->price;
     }
 }
