@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError, type Order, type Voucher, type Paginated } from '../../services/api'
+import { api, ApiError, type Order, type Paginated } from '../../services/api'
 import { useAuth } from '../../store'
 
 interface Stats {
@@ -392,6 +392,134 @@ export default function Admin() {
             </div>
           </div>
         </>
+      )}
+
+      {tab === 'orders' && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-600">
+            Semua Pesanan ({adminOrders.length})
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2">Order</th>
+                  <th className="px-4 py-2">Merchant</th>
+                  <th className="px-4 py-2">Pembeli</th>
+                  <th className="px-4 py-2">Total</th>
+                  <th className="px-4 py-2">Bayar</th>
+                  <th className="px-4 py-2">Kirim</th>
+                  <th className="px-4 py-2">Voucher</th>
+                  <th className="px-4 py-2">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminOrders.map((o) => (
+                  <tr key={o.id} className="border-b border-slate-50">
+                    <td className="px-4 py-2 font-mono text-xs">{o.order_no}</td>
+                    <td className="px-4 py-2">{o.merchant?.name ?? '—'}</td>
+                    <td className="px-4 py-2">{o.buyer_name}</td>
+                    <td className="px-4 py-2 font-semibold">{fmt(o.total)}</td>
+                    <td className="px-4 py-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${o.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {o.payment_status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                        {o.fulfillment_status}
+                      </span>
+                      {o.return_status && <div className="text-xs text-rose-600">retur: {o.return_status}</div>}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-slate-500">
+                      {o.voucher_code ? `${o.voucher_code} −${fmt(o.voucher_discount)}` : '—'}
+                    </td>
+                    <td className="px-4 py-2">
+                      {['pending', 'packed'].includes(o.fulfillment_status) && (
+                        <button
+                          disabled={busy === o.id}
+                          onClick={() => adminCancel(o)}
+                          className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50"
+                        >
+                          Batal
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {adminOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-6 text-center text-slate-400">Belum ada pesanan.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'vouchers' && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 text-sm font-semibold text-slate-600 flex items-center justify-between">
+            <span>Voucher ({adminVouchers.length})</span>
+            <span className="text-xs font-normal text-slate-400">
+              Platform (lintas toko) + milik seller
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-slate-400 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2">Kode</th>
+                  <th className="px-4 py-2">Nama</th>
+                  <th className="px-4 py-2">Cakupan</th>
+                  <th className="px-4 py-2">Nilai</th>
+                  <th className="px-4 py-2">Pemilik</th>
+                  <th className="px-4 py-2">Terpakai</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminVouchers.map((v) => (
+                  <tr key={v.id} className="border-b border-slate-50">
+                    <td className="px-4 py-2 font-mono text-xs">{v.code}</td>
+                    <td className="px-4 py-2">
+                      {v.name}
+                      {v.free_shipping && <span className="text-xs text-emerald-600"> · ongkir</span>}
+                    </td>
+                    <td className="px-4 py-2 text-slate-500">{v.scope}</td>
+                    <td className="px-4 py-2">{v.type === 'percent' ? `${v.value}%` : fmt(v.value)}</td>
+                    <td className="px-4 py-2 text-slate-500">{v.merchant?.name ?? 'Platform'}</td>
+                    <td className="px-4 py-2">
+                      {v.used}
+                      {v.quota ? ` / ${v.quota}` : ''}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${v.active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {v.active ? 'Aktif' : 'Mati'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        disabled={busy === v.id}
+                        onClick={() => toggleVoucher(v)}
+                        className="text-xs px-2 py-1 rounded border border-slate-200 hover:bg-slate-50"
+                      >
+                        {v.active ? 'Matikan' : 'Aktifkan'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {adminVouchers.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-6 text-center text-slate-400">Belum ada voucher.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {tab === 'withdrawals' && (
