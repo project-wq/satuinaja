@@ -53,7 +53,7 @@ class Phase14Test extends TestCase
         return array_filter([
             'merchant_slug' => $m->slug,
             'buyer_name' => 'Budi', 'buyer_phone' => '0812000001',
-            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '3171',
+            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '3171', 'destination_postal_code' => '12950',
             'courier' => 'jne', 'service' => 'REG', 'shipping_cost' => 20000,
             'items' => [['product_id' => $p->id, 'qty' => 2]],
             'voucher_code' => $code,

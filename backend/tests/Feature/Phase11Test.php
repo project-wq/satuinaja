@@ -117,7 +117,7 @@ class Phase11Test extends TestCase
         $r = $this->postJson('/api/v1/checkout', [
             'merchant_slug' => $m->slug,
             'buyer_name' => 'Budi', 'buyer_phone' => '0812000000',
-            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '31',
+            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '31', 'destination_postal_code' => '12950',
             'courier' => 'jne', 'service' => 'REG', 'shipping_cost' => 10000,
             'items' => [['product_id' => $p->id, 'variant_id' => $v->id, 'qty' => 2]],
         ]);
@@ -147,7 +147,7 @@ class Phase11Test extends TestCase
         $this->postJson('/api/v1/checkout', [
             'merchant_slug' => $m->slug,
             'buyer_name' => 'Budi', 'buyer_phone' => '0812000000',
-            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '31',
+            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '31', 'destination_postal_code' => '12950',
             'courier' => 'jne', 'service' => 'REG', 'shipping_cost' => 10000,
             'items' => [['product_id' => $p->id, 'variant_id' => $v->id, 'qty' => 3]],
         ])->assertStatus(422);
@@ -170,7 +170,7 @@ class Phase11Test extends TestCase
         $this->postJson('/api/v1/checkout', [
             'merchant_slug' => $m->slug,
             'buyer_name' => 'Budi', 'buyer_phone' => '0812000000',
-            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '31',
+            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '31', 'destination_postal_code' => '12950',
             'courier' => 'jne', 'service' => 'REG', 'shipping_cost' => 0,
             'items' => [['product_id' => $p->id, 'variant_id' => $v->id, 'qty' => 1]],
         ])->assertNotFound();

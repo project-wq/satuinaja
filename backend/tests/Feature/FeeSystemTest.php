@@ -143,7 +143,7 @@ class FeeSystemTest extends TestCase
             'buyer_name' => 'Budi',
             'buyer_phone' => '0812',
             'shipping_address' => 'Jl. Test 1',
-            'destination_city_id' => '114',
+            'destination_city_id' => '114', 'destination_postal_code' => '12950',
             'courier' => 'jne',
             'service' => 'REG',
             'shipping_cost' => 6000,

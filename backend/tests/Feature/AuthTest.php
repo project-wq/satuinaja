@@ -7,40 +7,67 @@ use App\Models\Merchant;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_merchant_can_register_and_gets_a_store(): void
+    /** Payload registrasi lengkap (alamat Biteship + KYC). */
+    private function registerPayload(array $over = []): array
     {
-        $res = $this->postJson('/api/v1/auth/register', [
+        return array_merge([
             'name' => 'Siti',
             'email' => 'siti@example.test',
             'password' => 'rahasia123',
             'password_confirmation' => 'rahasia123',
             'store_name' => 'Toko Siti',
-        ]);
+            'phone' => '08120000001',
+            'address' => 'Jl. Melati No. 1',
+            'province' => 'DKI Jakarta',
+            'city_name' => 'Jakarta Selatan',
+            'district' => 'Cilandak',
+            'postal_code' => '12430',
+            'kyc_nik' => '3171010101010001',
+            'kyc_ktp' => UploadedFile::fake()->image('ktp.jpg', 400, 250),
+        ], $over);
+    }
 
+    public function test_merchant_can_register_and_gets_a_store(): void
+    {
+        $res = $this->post('/api/v1/auth/register', $this->registerPayload(), ['Accept' => 'application/json']);
         $res->assertCreated()
             ->assertJsonPath('data.email', 'siti@example.test')
-            ->assertJsonPath('data.merchant.name', 'Toko Siti');
+            ->assertJsonPath('data.merchant.name', 'Toko Siti')
+            ->assertJsonPath('data.merchant.kyc_status', 'pending');
 
-        $this->assertDatabaseHas('merchants', ['name' => 'Toko Siti']);
+        // Toko baru menunggu persetujuan KYC admin → belum aktif.
+        $this->assertDatabaseHas('merchants', [
+            'name' => 'Toko Siti',
+            'kyc_status' => 'pending',
+            'postal_code' => '12430',
+            'active' => false,
+        ]);
+    }
+
+    public function test_register_rejects_missing_address_or_kyc(): void
+    {
+        $this->post('/api/v1/auth/register', $this->registerPayload([
+            'postal_code' => '123',
+            'kyc_nik' => '123',
+        ]), ['Accept' => 'application/json'])->assertStatus(422);
     }
 
     public function test_register_rejects_duplicate_email(): void
     {
         User::factory()->create(['email' => 'ada@example.test']);
 
-        $this->postJson('/api/v1/auth/register', [
+        $this->post('/api/v1/auth/register', $this->registerPayload([
             'name' => 'X',
             'email' => 'ada@example.test',
-            'password' => 'rahasia123',
-            'password_confirmation' => 'rahasia123',
             'store_name' => 'Toko X',
-        ])->assertStatus(422);
+        ]), ['Accept' => 'application/json'])->assertStatus(422);
     }
 
     public function test_login_succeeds_with_correct_password(): void

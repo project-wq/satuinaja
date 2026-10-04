@@ -42,7 +42,7 @@ class Phase15Test extends TestCase
             'merchant_id' => $m->id,
             'order_no' => 'ORD-'.uniqid(),
             'buyer_name' => 'Budi', 'buyer_phone' => '0812000001',
-            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '3171',
+            'shipping_address' => 'Jl. Melati 1', 'destination_city_id' => '3171', 'destination_postal_code' => '12950',
             'courier' => 'jne', 'service' => 'REG', 'shipping_cost' => 20000,
             'subtotal' => $p->price * $qty,
             'discount_total' => $f['discount'],
