@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\V1\MarketplaceWebhookController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\RefundController;
+use App\Http\Controllers\Api\V1\ReviewController;
+use App\Http\Controllers\Api\V1\StaffController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ShippingController;
 use App\Http\Controllers\Api\V1\StorefrontController;
@@ -88,9 +90,21 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     Route::post('ai/caption', [AiController::class, 'caption']);
     Route::post('ai/preview', [AiController::class, 'preview']);
 
-    // Langganan & batas plan
-    Route::get('billing', [BillingController::class, 'index']);
-    Route::post('billing/subscribe', [BillingController::class, 'subscribe']);
+    // Langganan & batas plan (Fase 20: staf diblokir).
+    Route::middleware('no-staff-finance')->group(function () {
+        Route::get('billing', [BillingController::class, 'index']);
+        Route::post('billing/subscribe', [BillingController::class, 'subscribe']);
+
+        // Fase 5: saldo seller + withdraw (merchant login)
+        Route::get('balance', [BalanceController::class, 'index']);
+        Route::get('balance/transactions', [BalanceController::class, 'transactions']);
+        Route::post('balance/withdraw', [BalanceController::class, 'withdraw']);
+        Route::get('balance/withdrawals', [BalanceController::class, 'withdrawals']);
+
+        // Fase 6: refund oleh seller
+        Route::get('refunds', [RefundController::class, 'index']);
+        Route::post('refunds', [RefundController::class, 'store']);
+    });
 
     // Admin (Fase 4)
     Route::prefix('admin')->group(function () {
@@ -130,12 +144,6 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
         Route::get('kyc/{merchant}/ktp', [AdminController::class, 'kycKtp']);
     });
 
-    // Fase 5: saldo seller + withdraw (merchant login)
-    Route::get('balance', [BalanceController::class, 'index']);
-    Route::get('balance/transactions', [BalanceController::class, 'transactions']);
-    Route::post('balance/withdraw', [BalanceController::class, 'withdraw']);
-    Route::get('balance/withdrawals', [BalanceController::class, 'withdrawals']);
-
     Route::get('orders', [CheckoutController::class, 'index']);
     Route::get('orders/{order}', [CheckoutController::class, 'show']);
 
@@ -155,9 +163,11 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
     // Fase 14: voucher milik merchant (check dipakai publik, lihat grup publik).
     Route::apiResource('vouchers', VoucherController::class);
 
-    // Fase 6: refund oleh seller
-    Route::get('refunds', [RefundController::class, 'index']);
-    Route::post('refunds', [RefundController::class, 'store']);
+    // Fase 20: kelola sub-akun staf (hanya pemilik toko).
+    Route::get('staff', [StaffController::class, 'index']);
+    Route::post('staff', [StaffController::class, 'store']);
+    Route::put('staff/{staff}', [StaffController::class, 'update']);
+    Route::delete('staff/{staff}', [StaffController::class, 'destroy']);
 
     // Fase 6: laporan penjualan
     Route::get('reports/sales', [ReportController::class, 'sales']);
