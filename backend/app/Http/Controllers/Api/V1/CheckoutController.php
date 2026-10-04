@@ -25,6 +25,7 @@ class CheckoutController extends Controller
         private \App\Services\PromotionService $promo,
         private \App\Services\BiteshipService $biteship,
         private \App\Services\OrderTrackingService $tracking,
+        private \App\Services\StockAlertService $stockAlert,
     ) {
     }
 
@@ -149,6 +150,7 @@ class CheckoutController extends Controller
                     $variant->decrement('stock', $item['qty']);
                 }
                 $product->decrement('stock', $item['qty']);
+                $affectedProducts[$product->id] = true;
             }
 
             // Fase 14: voucher (dalam transaksi; redeem + kurangi kuota).
@@ -218,6 +220,14 @@ class CheckoutController extends Controller
 
         $snap = $this->midtrans->createSnap($order->load('items'));
         Audit::record('order.created', $order, ['order_no' => $order->order_no]);
+
+        // Fase 23: cek stok menipis/habis per produk terdampak.
+        foreach ($order->items as $line) {
+            $p = Product::withoutGlobalScope('merchant')->whereKey($line->product_id)->first();
+            if ($p) {
+                $this->stockAlert->check($p);
+            }
+        }
 
         $this->notif->push(
             $merchant->id,
@@ -523,6 +533,14 @@ class CheckoutController extends Controller
         });
         Audit::record('order.cancelled', $order, ['by' => $order->cancelled_by]);
 
+        // Fase 23: stok kembali → reset flag alert per produk.
+        foreach ($order->items as $line) {
+            $p = Product::withoutGlobalScope('merchant')->whereKey($line->product_id)->first();
+            if ($p) {
+                $this->stockAlert->check($p);
+            }
+        }
+
         return response()->json(['data' => $order->fresh()]);
     }
 
@@ -580,6 +598,16 @@ class CheckoutController extends Controller
             }
         });
         Audit::record('order.return_'.$data['decision'], $order);
+
+        // Fase 23: retur approved → stok kembali, reset flag alert.
+        if ($data['decision'] === 'approved') {
+            foreach ($order->items as $line) {
+                $p = Product::withoutGlobalScope('merchant')->whereKey($line->product_id)->first();
+                if ($p) {
+                    $this->stockAlert->check($p);
+                }
+            }
+        }
 
         return response()->json(['data' => $order->fresh()]);
     }
