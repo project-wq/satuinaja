@@ -49,6 +49,10 @@ Route::prefix('v1')->middleware('throttle:api-public')->group(function () {
     Route::post('checkout', [CheckoutController::class, 'store']);
     Route::get('orders/track/{orderNo}', [CheckoutController::class, 'track']);
 
+    // Fase 19: ulasan (kirim publik, daftar per toko publik).
+    Route::post('reviews', [ReviewController::class, 'store']);
+    Route::get('shops/{slug}/reviews', [ReviewController::class, 'forShop']);
+
     // Fase 14: voucher publik (daftar tayang + cek kode).
     Route::get('vouchers/public', [VoucherController::class, 'publicList']);
     Route::post('vouchers/check', [VoucherController::class, 'check']);

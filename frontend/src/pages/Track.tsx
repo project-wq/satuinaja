@@ -3,6 +3,12 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import Header from '../components/ShopHeader'
 import { api } from '../services/api'
 
+type TrackEvent = {
+  status: string
+  message: string
+  occurred_at: string | null
+}
+
 type OrderTrack = {
   order_no: string
   payment_status: string
@@ -10,6 +16,7 @@ type OrderTrack = {
   tracking_no: string | null
   courier: string | null
   total: number
+  timeline: TrackEvent[]
 }
 
 interface TrackResponse {
@@ -109,6 +116,36 @@ export default function Track() {
                   Resi {order.courier?.toUpperCase()}: <span className="font-mono">{order.tracking_no}</span>
                 </p>
               )}
+              {order.timeline && order.timeline.length > 0 && (
+                <div className="pt-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Perjalanan Paket
+                  </p>
+                  <ol className="mt-2 border-l-2 border-slate-300 pl-4 space-y-3 text-sm bg-white rounded-lg p-3">
+                    {order.timeline.map((t, i) => (
+                      <li key={i} className="relative">
+                        <span className="absolute -left-[25px] top-1.5 w-2.5 h-2.5 rounded-full bg-slate-900" />
+                        <p className="font-medium">{t.message}</p>
+                        {t.occurred_at && (
+                          <p className="text-xs text-slate-500">
+                            {new Date(t.occurred_at).toLocaleString('id-ID')}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              {order.fulfillment_status === 'delivered' && (
+                <p className="pt-1">
+                  <Link
+                    to={`/${shopSlug}/review/${encodeURIComponent(order.order_no)}`}
+                    className="text-xs font-medium text-slate-900 underline"
+                  >
+                    Paket diterima? Beri ulasan ★
+                  </Link>
+                </p>
+              )}
             </div>
           )}
         </section>
@@ -137,7 +174,7 @@ export default function Track() {
 
           {resiErr && (
             <p className="mt-3 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-              {resiErr} <span className="text-xs">(butuh BINDERBYTE_API_KEY di backend .env)</span>
+              {resiErr} <span className="text-xs">(butuh API key Biteship di Admin → Pengaturan)</span>
             </p>
           )}
 

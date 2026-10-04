@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'buyer_fee', 'buyer_admin_fee', 'seller_net', 'total', 'tracking_no',
     'payment_status', 'payment_ref', 'payment_url', 'fulfillment_status',
     'voucher_id', 'voucher_discount', 'voucher_code', 'shipping_discount',
-    'biteship_order_id', 'routing_code', 'biteship_price',
+    'biteship_order_id', 'routing_code', 'biteship_price', 'track_synced_at',
     'packed_at', 'shipped_at', 'delivered_at', 'completed_at',
     'cancelled_at', 'cancelled_by', 'cancel_reason',
     'return_status', 'return_requested_at', 'return_reason',

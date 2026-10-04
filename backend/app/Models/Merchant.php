@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'province', 'city_name', 'district', 'postal_code', 'area_id',
     'kyc_status', 'kyc_nik', 'kyc_ktp_path',
     'kyc_submitted_at', 'kyc_reviewed_at', 'kyc_reject_reason',
-    'plan_code', 'publishes_this_month', 'last_publish_reset_at',
+    'plan_code', 'publishes_this_month', 'last_publish_reset_at', 'rating_avg', 'rating_count',
 ])]
 class Merchant extends Model
 {

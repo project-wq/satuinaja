@@ -32,7 +32,7 @@ class StorefrontController extends Controller
                     'slug' => $merchant->slug,
                     'description' => $merchant->description,
                     'logo_path' => $merchant->logo_path,
-                    'city_id' => $merchant->city_id,
+                    'city_id' => $merchant->city_id, 'rating_avg' => (float) $merchant->rating_avg, 'rating_count' => (int) $merchant->rating_count,
                 ],
                 'products' => $products,
             ],
