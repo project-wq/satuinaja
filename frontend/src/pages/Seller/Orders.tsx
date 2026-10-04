@@ -132,6 +132,75 @@ export default function Orders() {
     act.mutate({ id: o.id, key })
   }
 
+  /** Buka jendela label resi siap cetak (data pengirim dari server). */
+  async function printLabel(o: Order) {
+    try {
+      const res = await api.get<{
+        data: Order
+        sender: { name: string; address?: string | null; district?: string | null; city_name?: string | null; province?: string | null; postal_code?: string | null; phone?: string | null }
+      }>(`/orders/${o.id}`)
+      const d = res.data
+      const s = res.sender
+      const esc = (v: unknown) =>
+        String(v ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+      const senderAddr = [s.address, s.district, s.city_name, s.province, s.postal_code].filter(Boolean).join(', ')
+      const w = window.open('', '_blank')
+      if (!w) {
+        setToast('Popup diblokir — izinkan popup untuk cetak label.')
+        return
+      }
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Label ${esc(d.order_no)}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:16px;background:#fff;color:#000}
+  .label{width:152mm;border:2px solid #000;padding:8mm;box-sizing:border-box}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:4mm}
+  .courier{font-size:22pt;font-weight:800;text-transform:uppercase}
+  .svc{font-size:11pt;margin-top:2px}
+  .order{text-align:right;font-size:9pt}
+  .waybill{font-size:26pt;font-weight:800;letter-spacing:2px;margin:6mm 0;word-break:break-all}
+  .cols{display:flex;gap:6mm}
+  .col{flex:1}
+  .hdr{font-size:8pt;text-transform:uppercase;color:#444;border-bottom:1px solid #999;margin-bottom:2mm}
+  .name{font-size:13pt;font-weight:700}
+  .addr{font-size:10pt;line-height:1.4;margin-top:1mm}
+  .items{margin-top:5mm;border-top:2px solid #000;padding-top:3mm;font-size:9pt}
+  .code{text-align:center;font-size:10pt;font-weight:700;margin-top:4mm;letter-spacing:3px}
+  @media print{body{padding:0}}
+</style></head><body><div class="label">
+  <div class="top">
+    <div>
+      <div class="courier">${esc(s.name)}</div>
+      <div class="svc">${esc(d.courier ?? '')} · ${esc(d.service ?? '')}</div>
+    </div>
+    <div class="order">Order&nbsp;#<b>${esc(d.order_no)}</b><br>${esc(d.created_at ? new Date(d.created_at).toLocaleDateString('id-ID') : '')}</div>
+  </div>
+  <div class="waybill">${esc(d.tracking_no ?? '-')}</div>
+  <div class="cols">
+    <div class="col">
+      <div class="hdr">Pengirim</div>
+      <div class="name">${esc(s.name)}</div>
+      <div class="addr">${esc(senderAddr)}<br>HP: ${esc(s.phone ?? '-')}</div>
+    </div>
+    <div class="col">
+      <div class="hdr">Penerima</div>
+      <div class="name">${esc(d.buyer_name)}</div>
+      <div class="addr">${esc(d.shipping_address ?? '')}${d.destination_postal_code ? `<br>Kode pos: ${esc(d.destination_postal_code)}` : ''}<br>HP: ${esc(d.buyer_phone)}</div>
+    </div>
+  </div>
+  <div class="items">Isi paket: ${(d.items ?? []).map((it) => `${esc(it.title)} × ${it.qty}`).join(', ') || '-'} · Total ${rupiah(d.total)}</div>
+  ${d.routing_code ? `<div class="code">${esc(d.routing_code)}</div>` : ''}
+</div></body></html>`)
+      w.document.close()
+      w.focus()
+      setTimeout(() => w.print(), 400)
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal memuat data label')
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-4">
@@ -324,6 +393,19 @@ export default function Orders() {
                     <span>{rupiah(it.line_total)}</span>
                   </div>
                 ))}
+              </div>
+            )}
+            {detail.tracking_no && (
+              <div className="border-t pt-2">
+                <div className="text-xs text-slate-500 mb-1">
+                  Resi: <b className="font-mono">{detail.tracking_no}</b>
+                </div>
+                <button
+                  onClick={() => printLabel(detail)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-slate-900 text-white"
+                >
+                  🖨 Cetak Label Resi
+                </button>
               </div>
             )}
             <div className="flex flex-wrap gap-2 pt-1">

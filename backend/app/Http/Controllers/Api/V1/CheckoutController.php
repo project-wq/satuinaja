@@ -254,7 +254,11 @@ class CheckoutController extends Controller
     {
         abort_unless($order->merchant_id === $request->user()->merchant->id, 403);
 
-        return response()->json(['data' => $order->load('items')]);
+        // sender: data pengirim untuk cetak label resi (alamat toko).
+        return response()->json([
+            'data' => $order->load('items'),
+            'sender' => $request->user()->merchant,
+        ]);
     }
 
     /**

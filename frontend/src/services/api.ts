@@ -155,6 +155,14 @@ export interface Order {
   shipping_cost: number
   total: number
   tracking_no: string | null
+  // Pengiriman (Biteship): data label resi.
+  courier?: string | null
+  service?: string | null
+  shipping_address?: string | null
+  destination_postal_code?: string | null
+  biteship_order_id?: string | null
+  routing_code?: string | null
+  created_at?: string | null
   payment_status: string
   fulfillment_status: string
   voucher_code: string | null
