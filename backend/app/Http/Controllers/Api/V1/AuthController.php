@@ -138,19 +138,19 @@ class AuthController extends Controller
 
     private function profile(User $user): array
     {
-        $user->loadMissing('merchant');
+        $eff = $user->effectiveMerchant();
 
         return [
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role,
-            'merchant' => $user->merchant ? [
-                'id' => $user->merchant->id,
-                'name' => $user->merchant->name,
-                'slug' => $user->merchant->slug,
-                'kyc_status' => $user->merchant->kyc_status,
-                'postal_code' => $user->merchant->postal_code,
+            'merchant' => $eff ? [
+                'id' => $eff->id,
+                'name' => $eff->name,
+                'slug' => $eff->slug,
+                'kyc_status' => $eff->kyc_status,
+                'postal_code' => $eff->postal_code,
             ] : null,
         ];
     }

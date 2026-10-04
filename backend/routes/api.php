@@ -138,6 +138,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api-auth'])->group(fu
 
     Route::get('orders', [CheckoutController::class, 'index']);
     Route::get('orders/{order}', [CheckoutController::class, 'show']);
+
+    // Fase 19: seller lihat ulasan + balas.
+    Route::get('reviews', [ReviewController::class, 'index']);
+    Route::put('reviews/{review}/reply', [ReviewController::class, 'reply']);
     Route::put('orders/{order}/ship', [CheckoutController::class, 'ship']);
 
     // Fase 15: alur pemenuhan order seller.
