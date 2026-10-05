@@ -95,7 +95,7 @@ export default function Track() {
           <form onSubmit={findOrder} className="mt-3 flex gap-2">
             <input
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              placeholder="ORD-261001-XXXXXX"
+              placeholder="ORD-XXXXXXXXXX"
               value={orderNo}
               onChange={(e) => setOrderNo(e.target.value)}
               required
