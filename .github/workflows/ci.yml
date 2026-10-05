@@ -18,8 +18,13 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, pdo_sqlite, sqlite3, openssl, curl, json, bcmath, gd, zip
+          extensions: mbstring, pdo_mysql, pdo_sqlite, sqlite3, openssl, curl, json, bcmath, gd, zip
           coverage: none
+
+      - name: Start MySQL
+        run: |
+          sudo systemctl start mysql
+          sudo mysql -e "CREATE DATABASE IF NOT EXISTS satuinaja CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
       - name: Copy .env
         working-directory: backend
@@ -35,10 +40,7 @@ jobs:
 
       - name: Prepare database
         working-directory: backend
-        run: |
-          mkdir -p database
-          touch database/database.sqlite
-          php artisan migrate --force
+        run: php artisan migrate --force --seed
 
       - name: Run tests
         working-directory: backend
