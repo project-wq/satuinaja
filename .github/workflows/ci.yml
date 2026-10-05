@@ -11,6 +11,20 @@ jobs:
     name: Backend (Laravel)
     runs-on: ubuntu-latest
 
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: satuinaja
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -20,11 +34,6 @@ jobs:
           php-version: '8.4'
           extensions: mbstring, pdo_mysql, pdo_sqlite, sqlite3, openssl, curl, json, bcmath, gd, zip
           coverage: none
-
-      - name: Start MySQL
-        run: |
-          sudo systemctl start mysql
-          sudo mysql -e "CREATE DATABASE IF NOT EXISTS satuinaja CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
       - name: Copy .env
         working-directory: backend
@@ -40,7 +49,11 @@ jobs:
 
       - name: Prepare database
         working-directory: backend
-        run: php artisan migrate --force --seed
+        env:
+          DB_USERNAME: root
+          DB_PASSWORD: root
+          DB_DATABASE: satuinaja
+        run: php artisan migrate --force
 
       - name: Run tests
         working-directory: backend
