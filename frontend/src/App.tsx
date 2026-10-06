@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import SellerLayout from './components/SellerLayout'
 import { useAuth } from './store'
@@ -18,38 +18,49 @@ import ProductDetail from './pages/ProductDetail'
 import Checkout from './pages/Checkout'
 import Track from './pages/Track'
 
+function GlobalToast({ msg, onClose }: { msg: string; onClose: () => void }) {
+  const isErr = /^(Gagal|Error)/i.test(msg)
+  return (
+    <div
+      className={`fixed top-4 right-4 z-50 text-sm rounded-lg px-4 py-2 shadow-lg flex items-center gap-2 ${
+        isErr ? 'bg-rose-600 text-white' : 'bg-slate-900 text-white'
+      }`}
+    >
+      <span>{msg}</span>
+      <button onClick={onClose} className="opacity-70 hover:opacity-100">✕</button>
+    </div>
+  )
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   const location = useLocation()
 
-  if (loading) {
-    return <div className="p-10 text-center text-slate-500">Memuat…</div>
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
-  }
-
+  if (loading) return <div className="p-10 text-center text-slate-500">Memuat…</div>
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   return <>{children}</>
 }
 
 export default function App() {
   const { fetchMe, loading } = useAuth()
   const location = useLocation()
+  const [toast, setToast] = useState('')
 
-  // Ambil sesi saat startup (cookie HttpOnly).
   useEffect(() => {
     fetchMe()
   }, [fetchMe])
 
-  // Scroll-to-top setiap ganti halaman.
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [location.pathname])
 
-  if (loading) {
-    return <div className="p-10 text-center text-slate-500">Memuat…</div>
-  }
+  useEffect(() => {
+    if (!toast) return
+    const id = setTimeout(() => setToast(''), 6000)
+    return () => clearTimeout(id)
+  }, [toast])
+
+  if (loading) return <div className="p-10 text-center text-slate-500">Memuat…</div>
 
   return (
     <Routes>

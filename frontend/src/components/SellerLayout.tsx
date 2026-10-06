@@ -1,9 +1,11 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../store'
+import { useToast } from '../hooks/useToast'
 
 export default function SellerLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { msgs, dismiss } = useToast()
 
   const link = ({ isActive }: { isActive: boolean }) =>
     `px-3 py-2 rounded-lg text-sm font-medium transition ${
@@ -86,8 +88,19 @@ export default function SellerLayout() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="max-w-6xl mx-auto px-4 py-6 relative">
         <Outlet />
+        {msgs.map((m) => (
+          <div
+            key={m.id}
+            className={`fixed top-4 right-4 text-sm rounded-lg px-4 py-2 shadow-lg flex items-center gap-2 ${
+              m.err ? 'bg-rose-600 text-white' : 'bg-slate-900 text-white'
+            }`}
+          >
+            <span>{m.text}</span>
+            <button onClick={() => dismiss(m.id)} className="opacity-70 hover:opacity-100">✕</button>
+          </div>
+        ))}
       </main>
     </div>
   )
