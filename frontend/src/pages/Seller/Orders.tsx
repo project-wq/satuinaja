@@ -21,7 +21,7 @@ function nextActions(o: Order): { key: string; label: string; danger?: boolean }
 export default function Orders() {
   const qc = useQueryClient()
   const [filter, setFilter] = useState('')
-  const [toast, setToast] = useState('')
+  const [_toast, _setToast] = useState('')
   const [detail, setDetail] = useState<Order | null>(null)
 
   const { data, isLoading } = useQuery({

@@ -6,7 +6,7 @@ export default function Channels() {
   const qc = useQueryClient()
   const [open, setOpen] = useState<string | null>(null)
   const [history, setHistory] = useState<number | null>(null)
-  const [toast, setToast] = useState('')
+  const [_toast, _setToast] = useState('')
 
   // Spesifikasi platform (field, label, catatan) diambil dari backend
   // supaya form selalu sinkron dengan service yang benar-benar ada.

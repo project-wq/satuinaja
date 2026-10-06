@@ -43,7 +43,7 @@ export default function Vouchers() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const [form, setForm] = useState<FormState | null>(null)
-  const [toast, setToast] = useState('')
+  const [_toast, _setToast] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['vouchers'],

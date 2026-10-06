@@ -8,7 +8,7 @@ export default function Products() {
   const [showForm, setShowForm] = useState(false)
   const [aiResult, setAiResult] = useState<string>('')
   const [busyAi, setBusyAi] = useState(false)
-  const [toast, setToast] = useState('')
+  const [_toast, _setToast] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['products'],
