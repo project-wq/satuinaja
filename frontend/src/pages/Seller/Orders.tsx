@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from '../../hooks/useToast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Order, type Paginated } from '../../services/api'
 import { rupiah } from '../../components/ShopHeader'
@@ -21,7 +22,7 @@ function nextActions(o: Order): { key: string; label: string; danger?: boolean }
 export default function Orders() {
   const qc = useQueryClient()
   const [filter, setFilter] = useState('')
-  const [_toast, _setToast] = useState('')
+  const { toast, dismiss, msgs } = useToast()
   const [detail, setDetail] = useState<Order | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -225,13 +226,6 @@ export default function Orders() {
           <option value="cancelled">Dibatal</option>
         </select>
       </div>
-
-      {toast && (
-        <div className="text-sm bg-slate-900 text-white rounded-lg px-4 py-2 flex items-center justify-between">
-          <span>{toast}</span>
-          <button onClick={() => setToast('')}>✕</button>
-        </div>
-      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         {isLoading ? (

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from '../../hooks/useToast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, type Voucher, type Paginated, type Product } from '../../services/api'
 import { rupiah } from '../../components/ShopHeader'
@@ -43,7 +44,7 @@ export default function Vouchers() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const [form, setForm] = useState<FormState | null>(null)
-  const [_toast, _setToast] = useState('')
+  const { toast, dismiss, msgs } = useToast()
 
   const { data, isLoading } = useQuery({
     queryKey: ['vouchers'],
@@ -138,13 +139,6 @@ export default function Vouchers() {
           + Buat voucher
         </button>
       </div>
-
-      {toast && (
-        <div className="text-sm bg-slate-900 text-white rounded-lg px-4 py-2 flex items-center justify-between">
-          <span>{toast}</span>
-          <button onClick={() => setToast('')}>✕</button>
-        </div>
-      )}
 
       {form && (
         <form

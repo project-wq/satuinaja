@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from '../../hooks/useToast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Channel, type Paginated, type Product } from '../../services/api'
 import { rupiah, imageUrl } from '../../components/ShopHeader'
@@ -8,7 +9,7 @@ export default function Products() {
   const [showForm, setShowForm] = useState(false)
   const [aiResult, setAiResult] = useState<string>('')
   const [busyAi, setBusyAi] = useState(false)
-  const [_toast, _setToast] = useState('')
+  const { toast, dismiss, msgs } = useToast()
 
   const { data, isLoading } = useQuery({
     queryKey: ['products'],
@@ -146,15 +147,6 @@ export default function Products() {
           {showForm ? 'Tutup' : '+ Produk'}
         </button>
       </div>
-
-      {toast && (
-        <div className="text-sm bg-slate-900 text-white rounded-lg px-4 py-2 flex items-center justify-between">
-          <span>{toast}</span>
-          <button onClick={() => setToast('')} className="opacity-70">
-            ✕
-          </button>
-        </div>
-      )}
 
       {variantFor && (
         <div className="bg-white rounded-xl border border-amber-200 p-5 space-y-3">

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useToast } from '../../hooks/useToast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type Channel, type PlatformSpec, type PublishRecord } from '../../services/api'
 
@@ -6,7 +7,7 @@ export default function Channels() {
   const qc = useQueryClient()
   const [open, setOpen] = useState<string | null>(null)
   const [history, setHistory] = useState<number | null>(null)
-  const [_toast, _setToast] = useState('')
+  const { toast, dismiss, msgs } = useToast()
 
   // Spesifikasi platform (field, label, catatan) diambil dari backend
   // supaya form selalu sinkron dengan service yang benar-benar ada.
@@ -62,13 +63,6 @@ export default function Channels() {
           balik ke browser.
         </p>
       </div>
-
-      {toast && (
-        <div className="text-sm bg-slate-900 text-white rounded-lg px-4 py-2 flex items-center justify-between">
-          <span>{toast}</span>
-          <button onClick={() => setToast('')}>✕</button>
-        </div>
-      )}
 
       <div className="grid md:grid-cols-2 gap-4">
         {(specs?.data ?? []).map((p) => {
