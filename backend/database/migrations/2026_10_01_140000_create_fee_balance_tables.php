@@ -36,20 +36,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('balance_transactions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('merchant_id')->constrained()->cascadeOnDelete();
-            $table->string('type', 32);   // sale|withdraw_hold|withdraw_paid|withdraw_refund|adjustment
-            $table->bigInteger('amount'); // +/- rupiah terhadap balance
-            $table->bigInteger('balance_after');
-            $table->foreignId('order_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('withdrawal_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('note')->nullable();
-            $table->timestamps();
-
-            $table->index(['merchant_id', 'created_at']);
-        });
-
         Schema::create('withdrawals', function (Blueprint $table) {
             $table->id();
             $table->foreignId('merchant_id')->constrained()->cascadeOnDelete();
@@ -64,6 +50,20 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['status', 'created_at']);
+        });
+
+        Schema::create('balance_transactions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('merchant_id')->constrained()->cascadeOnDelete();
+            $table->string('type', 32);   // sale|withdraw_hold|withdraw_paid|withdraw_refund|adjustment
+            $table->bigInteger('amount'); // +/- rupiah terhadap balance
+            $table->bigInteger('balance_after');
+            $table->foreignId('order_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('withdrawal_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('note')->nullable();
+            $table->timestamps();
+
+            $table->index(['merchant_id', 'created_at']);
         });
 
         // Fee config default.
